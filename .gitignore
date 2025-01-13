@@ -1,0 +1,14 @@
+# Pythonのバイトコードやキャッシュ
+__pycache__/
+*.py[cod]
+
+# 仮想環境フォルダ(例: .venv、venv)
+.venv/
+venv/
+
+# OS固有の不要ファイル
+.DS_Store
+Thumbs.db
+
+# ローカルのファイル
+.env
