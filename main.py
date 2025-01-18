@@ -17,6 +17,8 @@ reporter = ReporterAgent()
 critic = CriticAgent()
 ta = TeachingAssistantAgent()
 
+conversation_log = []
+
 class TopicRequest(BaseModel):
     topic: str
 
@@ -31,6 +33,9 @@ class TARequest(BaseModel):
 class ChainRequest(BaseModel):
     topic: str
     additional_note: str = ""
+
+class UserSpeakRequest(BaseModel):
+    content: str
 
 @app.get("/")
 def read_root():
@@ -74,3 +79,16 @@ def chain_endpoint(request: ChainRequest):
         "points": points,
         "ta_message": ta_message
     }
+
+@app.post("/user_speak")
+def user_speak(request: UserSpeakRequest):
+    conversation_log.append({"role": "user", "content": request.content})
+    # For now, we just call TA with the latest user content.
+    # More advanced logic (involving Reporter or Critic) can be added later.
+    ta_reply = ta.facilitate_discussion(
+        report_text=request.content,
+        points=[],
+        additional_note="ユーザーからの質問です。"
+    )
+    conversation_log.append({"role": "ta", "content": ta_reply})
+    return {"ta_reply": ta_reply}
