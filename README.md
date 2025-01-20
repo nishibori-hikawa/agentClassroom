@@ -1,5 +1,11 @@
 # agentClassroom
 
+## Pythonのバージョン
+3.11.3
+
+## Poetryのバージョン
+2.0.1
+
 ## 環境変数の設定
 
 ### .envファイル
