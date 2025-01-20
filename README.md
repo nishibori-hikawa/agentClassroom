@@ -1,17 +1,28 @@
 # agentClassroom
 
-## 環境変数の設定（.envファイル）
+## 環境変数の設定
+
+### .envファイル
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key
 ```
 
+### .env.localファイル
+
+```bash
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+```
+
 ## 実行方法
+
+Agent Classroomのバックエンドを起動するには以下のコマンドを実行してください。
 ```bash
 poetry run uvicorn main:app --reload
 ```
 
-## 別のターミナルで
+Agent Classroomのフロントエンドを起動するには以下のコマンドを実行してください。
 ```bash
-curl -X POST "http://127.0.0.1:8000/ask" -H "Content-Type: application/json" -d '{"topic": "ブロック チェーン"}'
+cd my-ai-classroom
+npm run dev
 ```
