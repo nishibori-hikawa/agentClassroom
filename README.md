@@ -1,5 +1,8 @@
 # agentClassroom
 
+## Pythonのバージョン
+3.11.3
+
 ## 環境変数の設定
 
 ### .envファイル
