@@ -1,13 +1,11 @@
 import React from 'react';
 import { List, ListItem, ListItemText, Box, Typography } from '@mui/material';
 
-const CriticPoints: React.FC = () => {
-  const points = [
-    'Point 1: Policy issues and political system challenges',
-    'Point 2: Factors of international conflict and cooperation',
-    'Point 3: Perspectives likely omitted in the report'
-  ];
+interface CriticPointsProps {
+  points: string[];
+}
 
+const CriticPoints: React.FC<CriticPointsProps> = ({ points }) => {
   return (
     <Box>
       <Typography variant="h6" component="h3" gutterBottom>

@@ -1,26 +1,43 @@
 import React, { useState } from 'react';
-import { TextField, Button, Box } from '@mui/material';
+import { TextField, Button, Box, Typography, CircularProgress } from '@mui/material';
+import AgentPopup from './AgentPopup';
+import useAgentFlow from '../hooks/useAgentFlow';
 
 const ReportForm: React.FC = () => {
   const [topic, setTopic] = useState('');
   const [loading, setLoading] = useState(false);
-  const [report, setReport] = useState('');
+  const [userInput, setUserInput] = useState('');
+  const [currentAgent, setCurrentAgent] = useState<string | null>(null);
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [rememberChoice, setRememberChoice] = useState(false);
+  const { initializeSteps, executeCurrentStep, currentStep, steps, results } = useAgentFlow();
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic }),
-      });
-      const data = await response.json();
-      setReport(data.report);
-    } catch (error) {
-      console.error('Error fetching report:', error);
-    } finally {
-      setLoading(false);
+    initializeSteps(topic);
+    setPopupOpen(true);
+    setCurrentAgent(steps[0]?.agent || null);
+    setLoading(false);
+  };
+
+  const handleUserChoice = async (choice: 'user' | 'agent') => {
+    setPopupOpen(false);
+    if (choice === 'user') {
+      const userResponse = prompt(`ユーザーとして${currentAgent}に対する入力をしてください:`);
+      if (userResponse && currentAgent) {
+        results[currentAgent] = userResponse;
+      }
+    } else {
+      await executeCurrentStep();
+    }
+
+    if (currentStep < steps.length) {
+      setCurrentAgent(steps[currentStep].agent);
+      setPopupOpen(true);
+    } else {
+      setShowReport(true);
     }
   };
 
@@ -34,13 +51,31 @@ const ReportForm: React.FC = () => {
         margin="normal"
         required
       />
-      <Button type="submit" variant="contained" color="primary" disabled={loading}>
-        {loading ? 'Loading...' : 'Submit'}
+      <Button type="submit" variant="contained" color="primary" disabled={loading || !topic}>
+        {loading ? <CircularProgress size={24} /> : 'Submit'}
       </Button>
-      {report && (
-        <Box mt={2}>
-          <h3>Report:</h3>
-          <p>{report}</p>
+
+      <AgentPopup
+        open={popupOpen}
+        agent={currentAgent || ''}
+        onUserChoice={handleUserChoice}
+        currentStep={currentStep}
+        totalSteps={steps.length}
+        rememberChoice={rememberChoice}
+        onRememberChoiceChange={setRememberChoice}
+      />
+
+      {showReport && (
+        <Box mt={4}>
+          <Typography variant="h5">Report Summary</Typography>
+          <Typography variant="h6">Blog:</Typography>
+          <Typography>{results['writer']}</Typography>
+          <Typography variant="h6">Report:</Typography>
+          <Typography>{results['reporter']}</Typography>
+          <Typography variant="h6">Critic Points:</Typography>
+          <Typography>{results['critic']}</Typography>
+          <Typography variant="h6">TA Messages:</Typography>
+          <Typography>{results['ta']}</Typography>
         </Box>
       )}
     </Box>

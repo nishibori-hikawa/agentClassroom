@@ -35,3 +35,27 @@ export const fetchTA = async (reportText: string, points: string[], additionalNo
   }
   return res.json();
 };
+
+export const fetchWriter = async (topic: string) => {
+  const res = await fetch(`${BACKEND_URL}/write`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic }),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch writer content');
+  }
+  return res.json();
+};
+
+export const fetchChain = async (topic: string, additionalNote: string = '') => {
+  const res = await fetch(`${BACKEND_URL}/chain`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, additional_note: additionalNote }),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch chain data');
+  }
+  return res.json();
+};
