@@ -15,18 +15,6 @@ const useAgentFlow = () => {
   const initializeSteps = (topic: string) => {
     const agentSteps: AgentStep[] = [
       {
-        agent: 'writer',
-        action: async () => {
-          const response = await fetch('/api/write', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic }),
-          });
-          const data = await response.json();
-          return data.blog;
-        },
-      },
-      {
         agent: 'reporter',
         action: async () => {
           const response = await fetch('/api/report', {

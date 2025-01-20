@@ -2,7 +2,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from writer_agent import WriterAgent
 from reporter_agent import ReporterAgent
 from critic_agent import CriticAgent
 from dotenv import load_dotenv
@@ -24,7 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-writer = WriterAgent()
 reporter = ReporterAgent()
 critic = CriticAgent()
 ta = TeachingAssistantAgent()
@@ -52,11 +50,6 @@ class UserSpeakRequest(BaseModel):
 @app.get("/")
 def read_root():
     return {"message": "AgentClassroom2 APIへようこそ！"}
-
-@app.post("/ask")
-def ask(request: TopicRequest):
-    blog_text = writer.write(request.topic)
-    return {"topic": request.topic, "blog": blog_text}
 
 @app.post("/report")
 def report(request: TopicRequest):
