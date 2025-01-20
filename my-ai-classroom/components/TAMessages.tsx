@@ -12,7 +12,7 @@ const TAMessages: React.FC<TAMessagesProps> = ({ messages }) => {
         TA Messages
       </Typography>
       <List>
-        {messages.map((message, index) => (
+        {messages?.map((message, index) => (
           <ListItem key={index}>
             <ListItemText primary={message} />
           </ListItem>

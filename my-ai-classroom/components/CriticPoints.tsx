@@ -12,7 +12,7 @@ const CriticPoints: React.FC<CriticPointsProps> = ({ points }) => {
         Critic Points
       </Typography>
       <List>
-        {points.map((point, index) => (
+        {points?.map((point, index) => (
           <ListItem key={index}>
             <ListItemText primary={point} />
           </ListItem>

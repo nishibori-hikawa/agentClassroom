@@ -39,7 +39,7 @@ const AgentPopup: React.FC<AgentPopupProps> = ({ open, agent, onUserChoice, curr
           </Button>
         </Tooltip>
         <Tooltip title="次回からこの選択を記憶します">
-          <Button onClick={() => onRememberChoiceChange(!rememberChoice)} color="default">
+          <Button onClick={() => onRememberChoiceChange(!rememberChoice)} color="primary">
             {rememberChoice ? '選択を記憶しない' : '選択を記憶する'}
           </Button>
         </Tooltip>
