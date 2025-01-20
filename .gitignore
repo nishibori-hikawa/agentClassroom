@@ -12,3 +12,11 @@ Thumbs.db
 
 # ローカルのファイル
 .env
+my-ai-classroom/.env.local
+
+# node_modules
+node_modules/
+
+# .next
+.next/
+
