@@ -1,13 +1,14 @@
 # main.py
 import os
 
-from critic_agent import CriticAgent
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from reporter_agent import ReporterAgent
-from ta_agent import TeachingAssistantAgent
+
+from agents.critic_agent import CriticAgent
+from agents.reporter_agent import ReporterAgent
+from agents.ta_agent import TeachingAssistantAgent
 
 load_dotenv()
 

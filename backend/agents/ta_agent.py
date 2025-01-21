@@ -8,7 +8,7 @@ TA_PROMPT_TEMPLATE = """
 {formatted_points}
 
 {additional_instructions}
-"""
+"""  # noqa: RUF001
 
 
 class TeachingAssistantAgent:
@@ -24,7 +24,11 @@ class TeachingAssistantAgent:
         formatted_points = "\n".join(f"- {p}" for p in points)
         prompt = PromptTemplate(
             template=TA_PROMPT_TEMPLATE,
-            input_variables=["report_text", "formatted_points", "additional_instructions"],
+            input_variables=[
+                "report_text",
+                "formatted_points",
+                "additional_instructions",
+            ],
         ).format(
             report_text=report_text,
             formatted_points=formatted_points,

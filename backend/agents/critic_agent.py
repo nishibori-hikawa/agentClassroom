@@ -1,6 +1,7 @@
 from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from prompt_writer import CRITIC_PROMPT_TEMPLATE
+
+from agents.prompt_writer import CRITIC_PROMPT_TEMPLATE
 
 
 class CriticAgent:

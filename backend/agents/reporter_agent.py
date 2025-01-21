@@ -4,7 +4,7 @@ from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 
 # とりあえずOpenAI例。Google Cloudなら PaLMモデルに差し替え可
-from prompt_writer import REPORTER_PROMPT_TEMPLATE
+from agents.prompt_writer import REPORTER_PROMPT_TEMPLATE
 
 
 class ReporterAgent:
