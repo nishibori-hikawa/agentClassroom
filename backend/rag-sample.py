@@ -11,6 +11,7 @@ from langchain_unstructured import UnstructuredLoader
 
 load_dotenv()
 
+# RAGに追加するPDFファイルを指定
 loader = UnstructuredLoader(
     file_path="./documents/SPGP-SAEA.pdf",
 )
@@ -49,6 +50,8 @@ chain: Runnable = (
     | StrOutputParser()
 )
 
+# RAGへの質問
 query = "What is SPGP-SAEA?"
+
 output = chain.invoke(query)
 print(output)
