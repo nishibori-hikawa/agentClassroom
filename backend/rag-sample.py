@@ -16,8 +16,7 @@ load_dotenv()
 
 
 # PDFファイルを読み込んで、Documentオブジェクトのリストに変換する
-def pdf_to_documents(file_path: str) -> list[Document]:
-    text = extract_text_from_pdf(file_path)
+def text_to_documents(text: str) -> list[Document]:
     docs = Document(page_content=text)
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     split_docs = text_splitter.split_documents([docs])
@@ -29,11 +28,11 @@ retriever: BaseRetriever
 if retriever_type == "tavily":
     retriever = TavilySearchAPIRetriever(k=3)
 else:
-    if True:
-        file_path = "./documents/main.pdf"
-        filtered_docs = pdf_to_documents(file_path)
-        embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-        db = Chroma.from_documents(filtered_docs, embeddings)
+    file_path = "./documents/main.pdf"
+    text = extract_text_from_pdf(file_path)
+    filtered_docs = text_to_documents(text)
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    db = Chroma.from_documents(filtered_docs, embeddings)
     retriever = db.as_retriever()
 
 template = '''
@@ -60,3 +59,5 @@ query = "筆者の主張を教えてください。"
 
 output = chain.invoke(query)
 print(output)
+
+
