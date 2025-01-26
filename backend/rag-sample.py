@@ -10,7 +10,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_text_splitters import CharacterTextSplitter
 
-from utils.pdf_loader import extract_text_from_pdf
+from utils import extract_text_from_pdf
 
 load_dotenv()
 
@@ -48,10 +48,7 @@ prompt = PromptTemplate(template=template, input_variables=["context", "question
 model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 chain: Runnable = (
-    {"context": retriever, "question": RunnablePassthrough()}
-    | prompt
-    | model
-    | StrOutputParser()
+    {"context": retriever, "question": RunnablePassthrough()} | prompt | model | StrOutputParser()
 )
 
 # RAGへの質問
@@ -59,5 +56,3 @@ query = "筆者の主張を教えてください。"
 
 output = chain.invoke(query)
 print(output)
-
-
