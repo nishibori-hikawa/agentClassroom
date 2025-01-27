@@ -24,7 +24,7 @@ class State(BaseModel):
     critic_content: str = Field(default="", description="criticの回答内容")
 
 
-class Reporter:
+class ReporterAgent:
     def __init__(self, retriever: BaseRetriever, llm: BaseChatModel) -> None:
         self.llm = llm
         self.retriever = retriever
@@ -52,7 +52,7 @@ class Reporter:
         return output
 
 
-class Critic:
+class CriticAgent:
     def __init__(self, llm: BaseChatModel, retriever: BaseRetriever) -> None:
         self.llm = llm
         self.retriever = retriever
@@ -87,7 +87,8 @@ class AgentClassroom:
         self.graph = self._create_graph()
         self.retriever = retriever
         self.llm = llm
-        self.reporter = Reporter(retriever, llm)
+        self.reporter = ReporterAgent(retriever, llm)
+        self.critic = CriticAgent(llm, retriever)
 
     def _create_graph(self) -> StateGraph:
         workflow = StateGraph(State)
@@ -115,7 +116,7 @@ class AgentClassroom:
         query = state.query
         report_text = state.reporter_content
 
-        critic = Critic(self.llm, self.retriever)
+        critic = self.critic
         generated_text = critic.generate_critique(report_text)
 
         return {"query": query, "current_role": "critic", "critic_content": generated_text}
