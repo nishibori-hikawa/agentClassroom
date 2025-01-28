@@ -12,16 +12,34 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
 from pydantic import BaseModel, Field
 
+from agent_classroom_repo import State
 from retrievers import create_pdf_retriever
 
-load_dotenv()
 
+class FacilitatorAgent:
+    def __init__(self, llm: BaseChatModel) -> None:
+        self.llm = llm
 
-class State(BaseModel):
-    query: str = Field(..., description="ユーザーからの質問")
-    current_role: str = Field(default="", description="選定された回答ロール")
-    reporter_content: str = Field(default="", description="reporterの回答内容")
-    critic_content: str = Field(default="", description="criticの回答内容")
+    def generate_feedback(self, query: str) -> str:
+        template = '''
+        あなたは国際政治演習に参加しているファシリテーターです。
+        以下の資料を元に、簡潔にフィードバックを作成してください。
+
+        資料: """
+        {context}
+        """
+
+        注意:
+        - 500字以内で、専門用語は高校生でもわかるように
+        - 要点を箇条書きで整理したあと、結論を述べる
+        '''
+
+        prompt = PromptTemplate(template=template, input_variables=["context", "question"])
+        model = self.llm
+
+        chain: Runnable = prompt | model | StrOutputParser()
+
+        return chain.invoke(query)
 
 
 class ReporterAgent:
@@ -48,8 +66,7 @@ class ReporterAgent:
 
         chain: Runnable = {"context": self.retriever} | prompt | model | StrOutputParser()
 
-        output = chain.invoke(query)
-        return output
+        return chain.invoke(query)
 
 
 class CriticAgent:
@@ -78,60 +95,4 @@ class CriticAgent:
         model = self.llm
         chain = prompt | model | StrOutputParser()
 
-        output = chain.invoke({"report_text": report_text, "context": context})
-        return output
-
-
-class AgentClassroom:
-    def __init__(self, llm: BaseChatModel, retriever: BaseRetriever) -> None:
-        self.graph = self._create_graph()
-        self.retriever = retriever
-        self.llm = llm
-        self.reporter = ReporterAgent(retriever, llm)
-        self.critic = CriticAgent(llm, retriever)
-
-    def _create_graph(self) -> StateGraph:
-        workflow = StateGraph(State)
-
-        workflow.add_node("reporter", self.reporter_node)
-        workflow.add_node("critic", self.critic_node)
-        workflow.add_edge("reporter", "critic")
-        workflow.set_entry_point("reporter")
-
-        return workflow
-
-    def reporter_node(self, state: State) -> dict[str, Any]:
-        query = state.query
-
-        reporter = self.reporter
-        generated_text = reporter.generate_report(query)
-
-        return {
-            "query": query,
-            "current_role": "reporter",
-            "reporter_content": generated_text,
-        }
-
-    def critic_node(self, state: State) -> dict[str, Any]:
-        query = state.query
-        report_text = state.reporter_content
-
-        critic = self.critic
-        generated_text = critic.generate_critique(report_text)
-
-        return {"query": query, "current_role": "critic", "critic_content": generated_text}
-
-
-def main():
-    # llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    llm = VertexAI(model="gemini-1.5-flash-001", temperature=0)
-    retriever = create_pdf_retriever("./documents/main.pdf")
-    agent = AgentClassroom(llm, retriever)
-    compiled = agent.graph.compile()
-    init_state = State(query="")
-    result = compiled.invoke(init_state)
-    pprint(result)
-
-
-if __name__ == "__main__":
-    main()
+        return chain.invoke({"report_text": report_text, "context": context})
