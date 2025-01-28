@@ -39,6 +39,7 @@ class TopicRequest(BaseModel):
 
 class CriticRequest(BaseModel):
     report_text: str
+    fact_check_results: dict = None
 
 
 class TARequest(BaseModel):
@@ -54,6 +55,7 @@ class ChainRequest(BaseModel):
 
 class UserSpeakRequest(BaseModel):
     content: str
+    feedback: str = None
 
 
 @app.get("/")
@@ -70,7 +72,7 @@ def report(request: TopicRequest):
 @app.post("/critic")
 def critic_endpoint(request: CriticRequest):
     points = critic.extract_points(request.report_text)
-    return {"points": points}
+    return {"points": points, "fact_check_results": request.fact_check_results}
 
 
 @app.post("/ta")

@@ -14,6 +14,7 @@ TA_PROMPT_TEMPLATE = """
 class TeachingAssistantAgent:
     def __init__(self, model_name="gpt-4o-mini", temperature=0.7):
         self.llm = ChatOpenAI(model_name=model_name, temperature=temperature)
+        self.user_feedback = []
 
     def facilitate_discussion(
         self,
@@ -35,3 +36,9 @@ class TeachingAssistantAgent:
             additional_instructions=additional_note or "",
         )
         return self.llm.predict(prompt)
+
+    def add_user_feedback(self, feedback: str):
+        self.user_feedback.append(feedback)
+
+    def get_user_feedback(self) -> list[str]:
+        return self.user_feedback
