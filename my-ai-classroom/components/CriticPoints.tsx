@@ -14,7 +14,7 @@ const CriticPoints: React.FC = () => {
         Critic Points
       </Typography>
       <List>
-        {points.map((point, index) => (
+        {points?.map((point, index) => (
           <ListItem key={index}>
             <ListItemText primary={point} />
           </ListItem>
