@@ -137,14 +137,14 @@ def run_discussion(request: TopicRequest):
             "status": "completed",
             "report": report_text,
             "critic_points": points,
-            "ta_message": ta_message
+            "ta_message": ta_message,
         }
     else:
         # インタラクティブモード: 最初のステップ（レポート生成）のみ実行
         report_text = reporter.report(request.user_topic)
         return {
             "status": "awaiting_report_feedback",
-            "report": report_text
+            "report": report_text,
         }
 
 
@@ -154,7 +154,7 @@ def submit_report_feedback(response: ReporterResponse):
     points = critic.extract_points(response.report_text)
     return {
         "status": "awaiting_critic_feedback",
-        "points": points
+        "points": points,
     }
 
 
@@ -164,5 +164,12 @@ def submit_critic_feedback(response: CriticResponse):
     ta_message = ta.facilitate_discussion("", response.points)
     return {
         "status": "completed",
-        "ta_message": ta_message
+        "ta_message": ta_message,
     }
+
+
+@app.get("/news_suggestions")
+def get_news_suggestions():
+    """ニュースの提案を取得するエンドポイント"""
+    news_items = ta.get_news_suggestions()
+    return {"news_items": news_items}

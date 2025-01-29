@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
-import { Box, CircularProgress, Button, TextField, Typography } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, CircularProgress, Button, TextField, Typography, List, ListItem, ListItemText } from '@mui/material';
 import ReportForm from './ReportForm';
 import TAMessages from './TAMessages';
+
+interface NewsItem {
+  title: string;
+  description: string;
+  link: string;
+}
 
 const DiscussionContainer: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -12,6 +18,25 @@ const DiscussionContainer: React.FC = () => {
   const [criticPoints, setCriticPoints] = useState<string[]>([]);
   const [criticFeedback, setCriticFeedback] = useState('');
   const [taMessage, setTaMessage] = useState('');
+  const [newsSuggestions, setNewsSuggestions] = useState<NewsItem[]>([]);
+
+  useEffect(() => {
+    fetchNewsSuggestions();
+  }, []);
+
+  const fetchNewsSuggestions = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/news_suggestions`);
+      const data = await response.json();
+      setNewsSuggestions(data.news_items);
+    } catch (error) {
+      console.error('Error fetching news suggestions:', error);
+    }
+  };
+
+  const handleNewsSelect = async (title: string) => {
+    await handleDiscussionStart(title);
+  };
 
   const handleDiscussionStart = async (topic: string) => {
     setLoading(true);
@@ -82,16 +107,47 @@ const DiscussionContainer: React.FC = () => {
           <Button
             variant={mode === 'auto' ? 'contained' : 'outlined'}
             onClick={() => setMode('auto')}
-            sx={{ mr: 2 }}
+            sx={{ mr: 2, mb: 2 }}
           >
             自動モード
           </Button>
           <Button
             variant={mode === 'interactive' ? 'contained' : 'outlined'}
             onClick={() => setMode('interactive')}
+            sx={{ mb: 2 }}
           >
             インタラクティブモード
           </Button>
+
+          <Typography variant="h6" gutterBottom>
+            最新のニューストピック
+          </Typography>
+          <List>
+            {newsSuggestions.map((news, index) => (
+              <ListItem
+                key={index}
+                button
+                onClick={() => handleNewsSelect(news.title)}
+                sx={{
+                  border: '1px solid #e0e0e0',
+                  borderRadius: 1,
+                  mb: 1,
+                  '&:hover': {
+                    backgroundColor: '#f5f5f5'
+                  }
+                }}
+              >
+                <ListItemText
+                  primary={news.title}
+                  secondary={news.description}
+                />
+              </ListItem>
+            ))}
+          </List>
+
+          <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+            または、自由にトピックを入力
+          </Typography>
           <ReportForm onSubmit={handleDiscussionStart} />
         </>
       )}
