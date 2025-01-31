@@ -1,3 +1,6 @@
+import random
+
+import feedparser
 from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 
@@ -15,6 +18,19 @@ class TeachingAssistantAgent:
     def __init__(self, model_name="gpt-4o-mini", temperature=0.7):
         self.llm = ChatOpenAI(model_name=model_name, temperature=temperature)
         self.user_feedback = []
+        self.news_feed_url = "http://feeds.cnn.co.jp/rss/cnn/cnn.rdf"
+
+    def get_news_suggestions(self) -> list[dict]:
+        """CNNニュースフィードから最新の5つのニュースを取得"""
+        feed = feedparser.parse(self.news_feed_url)
+        news_items = []
+
+        for entry in feed.entries[:5]:  # 最新5件を取得
+            news_items.append(
+                {"title": entry.title, "description": entry.description, "link": entry.link},
+            )
+
+        return news_items
 
     def facilitate_discussion(
         self,
