@@ -85,3 +85,15 @@ class CriticAgent:
         chain = prompt | model | StrOutputParser()
 
         return chain.invoke({"report_text": report_text, "context": context})
+
+
+if __name__ == "__main__":
+    from langchain_openai import ChatOpenAI
+    from retrievers import create_pdf_retriever
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    retriever = create_pdf_retriever("./documents/main.pdf")
+
+    agent = CriticAgent(llm, retriever)
+    report_text = "This is a sample report text."
+    print(agent.generate_critique(report_text))
