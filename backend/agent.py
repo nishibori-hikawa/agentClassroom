@@ -1,5 +1,7 @@
+from typing import TYPE_CHECKING
+
 from langchain_core.language_models import BaseChatModel
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import Runnable
@@ -26,12 +28,8 @@ class FacilitatorAgent:
         - 要点を箇条書きで整理したあと、結論を述べる
         '''
 
-        prompt = PromptTemplate(template=template, input_variables=["context", "question"])
-        model = self.llm
-
-        chain: Runnable = prompt | model | StrOutputParser()
-
-        return chain.invoke(query)
+if TYPE_CHECKING:
+    from langchain_core.runnables import Runnable
 
 
 class ReporterAgent:
@@ -59,6 +57,11 @@ class ReporterAgent:
         chain: Runnable = {"context": self.retriever} | prompt | model | StrOutputParser()
 
         return chain.invoke(query)
+
+
+class CriticContent(BaseModel):
+    pros: str = Field(..., description="論点の利点")
+    cons: str = Field(..., description="論点の欠点")
 
 
 class CriticAgent:

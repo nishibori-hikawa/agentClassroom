@@ -10,15 +10,28 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledGraph, StateGraph
 from pydantic import BaseModel, Field
 
-from agent import CriticAgent, ReporterAgent
-from retrievers import create_pdf_retriever
+from agent import CriticAgent, ReporterAgent, CriticContent
+from retrievers import create_pdf_retriever, create_mock_retriever
+
+from enum import Enum
+
+
+class ProsCons(Enum):
+    PROS = "pros"
+    CONS = "cons"
+
+
+class HumanSelection(BaseModel):
+    selection_num: int = Field(..., description="選択された回答番号")
+    pros_cons: ProsCons = Field(..., description="選択された回答の利点か欠点か")
 
 
 class State(BaseModel):
     query: str = Field(..., description="ユーザーからの質問")
     current_role: str = Field(default="", description="選定された回答ロール")
     reporter_content: str = Field(default="", description="reporterの回答内容")
-    critic_content: str = Field(default="", description="criticの回答内容")
+    critic_content: list[CriticContent] = Field(default=[], description="criticの回答内容")
+    # human_selection: HumanSelection = Field(default={0, ""}, description="humanの選択内容")
     thead_id: str = Field(default="", description="スレッドID")
 
 
@@ -36,7 +49,9 @@ class AgentClassroom:
 
         workflow.add_node("reporter", self.reporter_node)
         workflow.add_node("critic", self.critic_node)
+        # workflow.add_node("human_selection", self.human_selection_node)
         workflow.add_edge("reporter", "critic")
+        # workflow.add_edge("critic", "human_selection")
         workflow.set_entry_point("reporter")
 
         return workflow.compile()
@@ -62,21 +77,25 @@ class AgentClassroom:
 
         return {"query": query, "current_role": "critic", "critic_content": generated_text}
 
-    def human_node(self, state: State) -> dict[str, Any]:
-        query = state.query
-        critic_content = state.critic_content
+    # def human_selection_node(self, state: State) -> dict[str, Any]:
+    #     query = state.query
+    #     critic_content = state.critic_content
 
-        return {"query": query, "current_role": "human", "critic_content": critic_content}
+    #     return {"query": query, "current_role": "human", "human_selection_num": critic_content}
+
+    def invoke(self, state: State) -> dict[str, Any]:
+        return self.graph.invoke(state)
 
 
 def main():
     load_dotenv()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     # llm = VertexAI(model="gemini-1.5-flash-001", temperature=0)
-    retriever = create_pdf_retriever("./documents/main.pdf")
+    # retriever = create_pdf_retriever("./documents/main.pdf")
+    retriever = create_mock_retriever()
     agent = AgentClassroom(llm, retriever)
     init_state = State(query="")
-    result = agent.graph.invoke(init_state)
+    result = agent.invoke(init_state)
     pprint(result)
 
 
