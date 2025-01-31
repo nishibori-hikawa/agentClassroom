@@ -1,34 +1,13 @@
+from typing import TYPE_CHECKING
+
 from langchain_core.language_models import BaseChatModel
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.retrievers import BaseRetriever
-from langchain_core.runnables import Runnable
+from pydantic import BaseModel, Field
 
-
-class FacilitatorAgent:
-    def __init__(self, llm: BaseChatModel) -> None:
-        self.llm = llm
-
-    def generate_feedback(self, query: str) -> str:
-        template = '''
-        あなたは国際政治演習に参加しているファシリテーターです。
-        以下の資料を元に、簡潔にフィードバックを作成してください。
-
-        資料: """
-        {context}
-        """
-
-        注意:
-        - 500字以内で、専門用語は高校生でもわかるように
-        - 要点を箇条書きで整理したあと、結論を述べる
-        '''
-
-        prompt = PromptTemplate(template=template, input_variables=["context", "question"])
-        model = self.llm
-
-        chain: Runnable = prompt | model | StrOutputParser()
-
-        return chain.invoke(query)
+if TYPE_CHECKING:
+    from langchain_core.runnables import Runnable
 
 
 class ReporterAgent:
@@ -58,6 +37,11 @@ class ReporterAgent:
         return chain.invoke(query)
 
 
+class CriticContent(BaseModel):
+    pros: str = Field(..., description="論点の利点")
+    cons: str = Field(..., description="論点の欠点")
+
+
 class CriticAgent:
     def __init__(self, llm: BaseChatModel, retriever: BaseRetriever) -> None:
         self.llm = llm
@@ -79,10 +63,15 @@ class CriticAgent:
         各論点は簡潔に、100文字以内でまとめること。
         '''
 
+        parser = PydanticOutputParser(pydantic_object=CriticContent)
         context = self.retriever.invoke(report_text)
-        prompt = PromptTemplate(template=template, input_variables=["report_text", "context"])
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["report_text", "context"],
+            partial_variables={"format_instructions": parser.get_format_instructions()},
+        )
         model = self.llm
-        chain = prompt | model | StrOutputParser()
+        chain = prompt | model
 
         return chain.invoke({"report_text": report_text, "context": context})
 
