@@ -1,44 +1,58 @@
 import React from 'react';
-import { Container, Box, Typography, Grid, Card, CardContent } from '@mui/material';
-import ReportForm from '../components/ReportForm';
-import CriticPoints from '../components/CriticPoints';
-import TAMessages from '../components/TAMessages';
+import { Container, Box, Typography, Card, CardContent, Grid } from '@mui/material';
+import DiscussionContainer from '../components/DiscussionContainer';
 
 const IndexPage: React.FC = () => {
   return (
-    <Container>
+    <Container maxWidth="xl">
       <Box my={4}>
         <Typography variant="h4" component="h1" gutterBottom>
           AI Classroom
         </Typography>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
-                <Typography variant="h5" component="h2">
-                  Report Form
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Reporter
                 </Typography>
-                <ReportForm />
+                <Typography variant="body2" color="textSecondary" paragraph>
+                  トピックについて調査し、レポートを作成します。
+                </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
-                <Typography variant="h5" component="h2">
-                  Critic Points
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Critic
                 </Typography>
-                <CriticPoints />
+                <Typography variant="body2" color="textSecondary" paragraph>
+                  レポートの内容を分析し、重要なポイントを抽出します。
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <Card>
+              <CardContent>
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Teaching Assistant
+                </Typography>
+                <Typography variant="body2" color="textSecondary" paragraph>
+                  ディスカッションをファシリテートし、学習をサポートします。
+                </Typography>
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Typography variant="h5" component="h2">
-                  TA Messages
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Discussion
                 </Typography>
-                <TAMessages />
+                <DiscussionContainer />
               </CardContent>
             </Card>
           </Grid>
