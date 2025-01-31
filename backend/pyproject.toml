@@ -14,7 +14,17 @@ dependencies = [
     "langchain (>=0.3.14,<0.4.0)",
     "openai (>=1.59.6,<2.0.0)",
     "langchain-community (>=0.3.14,<0.4.0)",
-    "langchain-openai (>=0.3.1,<0.4.0)"
+    "langchain-openai (>=0.3.1,<0.4.0)",
+    "langchain-unstructured (>=0.1.6,<0.2.0)",
+    "langchain-text-splitters (>=0.3.5,<0.4.0)",
+    "unstructured[pdf] (>=0.16.14,<0.17.0)",
+    "langchain-chroma (>=0.2.0,<0.3.0)",
+    "tavily-python (>=0.5.0,<0.6.0)",
+    "pdfplumber (>=0.11.5,<0.12.0)",
+    "ruff (>=0.9.3,<0.10.0)",
+    "langgraph (>=0.2.67,<0.3.0)",
+    "langchain-google-vertexai (>=2.0.12,<3.0.0)",
+    "langserve[all] (>=0.3.1,<0.4.0)"
 ]
 
 [tool.ruff]
@@ -33,6 +43,8 @@ ignore = [
     "TD002", # missing todo author
     "TD003", # missing todo link
     "PD011", # pandas use of dot values
+    "F403",  # undefined name
+    "F405",  # undefined name
 ]
 unfixable = [
     "F401", # unused import
@@ -44,6 +56,9 @@ logger-objects = ["src.library.logger.LOGGER"]
 [tool.ruff.lint.pylint]
 max-args = 6
 
+[tool.poetry.dependencies]
+python = ">=3.11, <3.13"
+unstructured = {extras = ["pdf"], version = "^0.16.14"}
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
