@@ -14,7 +14,7 @@ from langgraph.graph.state import CompiledGraph, StateGraph
 from pydantic import BaseModel, Field
 
 from agent import CriticAgent, CriticContent, ReporterAgent
-from retrievers import create_mock_retriever, create_pdf_retriever
+from retrievers import create_tavily_search_api_retriever
 
 
 class ProsCons(Enum):
@@ -31,7 +31,7 @@ class State(BaseModel):
     query: str = Field(..., description="ユーザーからの質問")
     current_role: str = Field(default="", description="選定された回答ロール")
     reporter_content: str = Field(default="", description="reporterの回答内容")
-    critic_content: list[CriticContent] = Field(default=[], description="criticの回答内容")
+    critic_content: CriticContent = Field(default=None, description="criticの回答内容")
     human_selection: HumanSelection = Field(
         default=HumanSelection(selection_num=0, pros_cons=ProsCons.CONS),
         description="humanの選択内容",
@@ -44,7 +44,7 @@ class AgentClassroom:
         self.llm = llm
         self.retriever = retriever
         self.reporter = ReporterAgent(retriever, llm)
-        self.critic = CriticAgent(llm, retriever)
+        self.critic = CriticAgent(llm)
         self.memory = MemorySaver()
         self.graph = self._create_graph()
 
@@ -109,9 +109,9 @@ def main():
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     # llm = VertexAI(model="gemini-1.5-flash-001", temperature=0)
     # retriever = create_pdf_retriever("./documents/main.pdf")
-    retriever = create_mock_retriever()
+    retriever = create_tavily_search_api_retriever()
     agent = AgentClassroom(llm, retriever)
-    init_state = State(query="", thread_id=1)
+    init_state = State(query="トランプの経済政策", thread_id=1)
     config = {"configurable": {"thread_id": "1"}}
     result = agent.graph.invoke(init_state, config)
 

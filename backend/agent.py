@@ -1,13 +1,14 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, TypedDict
 
-import dotenv
+from dotenv import load_dotenv
 from langchain_core.language_models import BaseChatModel
+from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import Runnable
-
-dotenv.load_dotenv()
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from langchain_core.runnables import Runnable
@@ -40,9 +41,13 @@ class ReporterAgent:
         return chain.invoke(query)
 
 
-# class CriticContent(BaseModel):
-#     pros: str = Field(..., description="論点の利点")
-#     cons: str = Field(..., description="論点の欠点")
+class CriticPoint(BaseModel):
+    title: str
+    cases: list[str]
+
+
+class CriticContent(BaseModel):
+    points: list[CriticPoint]
 
 
 class CriticAgent:
@@ -50,24 +55,7 @@ class CriticAgent:
         self.llm = llm
 
     def generate_critique(self, report_text: str) -> dict:
-        from langchain.output_parsers import ResponseSchema, StructuredOutputParser
-        from langchain.prompts import ChatPromptTemplate
-
-        # Define the response schema for structured output
-        response_schemas = [
-            ResponseSchema(
-                name="points",
-                description=(
-                    "Array of 3 discussion points, each with a 'title' and a 'cases' array of 2 strings. "
-                    "First two points should be yes/no questions, third point should be an open question. "
-                    "Example: [{ title: 'Is...?', cases: ['Yes case: ...', 'No case: ...']}, {...}, { title: 'What are...?', cases: ['View A: ...', 'View B: ...']}]"
-                ),
-                type="array(objects)",
-            ),
-        ]
-
-        # Create parser
-        parser = StructuredOutputParser.from_response_schemas(response_schemas)
+        parser = PydanticOutputParser(pydantic_object=CriticContent)
 
         # Create prompt template
         template = (
@@ -103,17 +91,12 @@ class CriticAgent:
         chain = prompt | self.llm | parser
 
         # Execute chain and return result
-        result = chain.invoke({"report_text": report_text})
-
-        return result
+        return chain.invoke({"report_text": report_text})
 
 
 if __name__ == "__main__":
-    from langchain_openai import ChatOpenAI
-
-    llm = ChatOpenAI(
-        model="gpt-4o-mini", temperature=0, openai_api_key=dotenv.get_key(".env", "OPENAI_API_KEY")
-    )
+    load_dotenv()
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     agent = CriticAgent(llm)
     report_text = "国際機関の関与は、国際政治の安定と平和を促進するために重要である。なぜなら、国際機関は各国の間での紛争を解決し、国際的な課題に対応するための重要なツールであるからである。例えば、ソマリアは国際機関の関与を受けて、紛争を解決し、平和を促進している。"
