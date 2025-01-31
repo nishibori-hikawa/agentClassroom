@@ -1,19 +1,8 @@
-from pprint import pprint
-from typing import Any
-
-from dotenv import load_dotenv
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import Runnable
-from langchain_google_vertexai import VertexAI
-from langchain_openai import ChatOpenAI
-from langgraph.graph import StateGraph
-from pydantic import BaseModel, Field
-
-from agent_classroom_repo import State
-from retrievers import create_pdf_retriever
 
 
 class FacilitatorAgent:
