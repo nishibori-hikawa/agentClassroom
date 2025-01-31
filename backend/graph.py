@@ -1,7 +1,10 @@
+import os
+from enum import Enum
 from pprint import pprint
 from typing import Any
 
 from dotenv import load_dotenv
+from IPython.display import Image, display
 from langchain_core.language_models import BaseChatModel
 from langchain_core.retrievers import BaseRetriever
 from langchain_google_vertexai import VertexAI
@@ -10,10 +13,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledGraph, StateGraph
 from pydantic import BaseModel, Field
 
-from agent import CriticAgent, ReporterAgent, CriticContent
-from retrievers import create_pdf_retriever, create_mock_retriever
-
-from enum import Enum
+from agent import CriticAgent, CriticContent, ReporterAgent
+from retrievers import create_mock_retriever, create_pdf_retriever
 
 
 class ProsCons(Enum):
@@ -31,7 +32,10 @@ class State(BaseModel):
     current_role: str = Field(default="", description="選定された回答ロール")
     reporter_content: str = Field(default="", description="reporterの回答内容")
     critic_content: list[CriticContent] = Field(default=[], description="criticの回答内容")
-    # human_selection: HumanSelection = Field(default={0, ""}, description="humanの選択内容")
+    human_selection: HumanSelection = Field(
+        default=HumanSelection(selection_num=0, pros_cons=ProsCons.CONS),
+        description="humanの選択内容",
+    )
     thead_id: str = Field(default="", description="スレッドID")
 
 
@@ -41,7 +45,7 @@ class AgentClassroom:
         self.retriever = retriever
         self.reporter = ReporterAgent(retriever, llm)
         self.critic = CriticAgent(llm, retriever)
-
+        self.memory = MemorySaver()
         self.graph = self._create_graph()
 
     def _create_graph(self) -> CompiledGraph:
@@ -49,12 +53,14 @@ class AgentClassroom:
 
         workflow.add_node("reporter", self.reporter_node)
         workflow.add_node("critic", self.critic_node)
-        # workflow.add_node("human_selection", self.human_selection_node)
+        workflow.add_node("human", self.human_node)
+        workflow.add_node("check", self.check_node)
         workflow.add_edge("reporter", "critic")
-        # workflow.add_edge("critic", "human_selection")
+        workflow.add_edge("critic", "human")
+        workflow.add_edge("human", "check")
         workflow.set_entry_point("reporter")
 
-        return workflow.compile()
+        return workflow.compile(checkpointer=self.memory, interrupt_before=["human"])
 
     def reporter_node(self, state: State) -> dict[str, Any]:
         query = state.query
@@ -77,14 +83,25 @@ class AgentClassroom:
 
         return {"query": query, "current_role": "critic", "critic_content": generated_text}
 
-    # def human_selection_node(self, state: State) -> dict[str, Any]:
-    #     query = state.query
-    #     critic_content = state.critic_content
+    def human_node(self, state: State) -> dict[str, Any]:
+        query = state.query
+        human_selection = HumanSelection(selection_num=0, pros_cons=ProsCons.CONS)
 
-    #     return {"query": query, "current_role": "human", "human_selection_num": critic_content}
+        return {"query": query, "current_role": "human", "human_selection": human_selection}
 
-    def invoke(self, state: State) -> dict[str, Any]:
-        return self.graph.invoke(state)
+    def check_node(self, state: State) -> dict[str, Any]:
+        query = state.query
+
+        return {"query": query, "current_role": "check"}
+
+    def show_image(self):
+        img_data = Image(self.graph.get_graph().draw_mermaid_png())
+        file_path = "compiled_graph.png"
+        with open(file_path, "wb") as f:
+            f.write(img_data.data)
+
+        # VS Codeで画像ファイルを開く
+        os.system(f"code {file_path}")
 
 
 def main():
@@ -94,8 +111,10 @@ def main():
     # retriever = create_pdf_retriever("./documents/main.pdf")
     retriever = create_mock_retriever()
     agent = AgentClassroom(llm, retriever)
-    init_state = State(query="")
-    result = agent.invoke(init_state)
+    init_state = State(query="", thread_id=1)
+    config = {"configurable": {"thread_id": "1"}}
+    result = agent.graph.invoke(init_state, config)
+
     pprint(result)
 
 
