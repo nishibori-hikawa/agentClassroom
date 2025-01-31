@@ -1,5 +1,5 @@
 [project]
-name = "agents"
+name = "backend"
 version = "0.1.0"
 description = ""
 authors = [
@@ -56,6 +56,13 @@ logger-objects = ["src.library.logger.LOGGER"]
 
 [tool.ruff.lint.pylint]
 max-args = 6
+
+[tool.poetry]
+name = "backend"
+version = "0.1.0"
+packages = [
+    { include = "*.py" }
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11, <3.13"
