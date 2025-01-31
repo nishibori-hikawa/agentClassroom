@@ -1,32 +1,13 @@
 from typing import TYPE_CHECKING
 
+import dotenv
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import Runnable
-import dotenv
 
 dotenv.load_dotenv()
-
-
-class FacilitatorAgent:
-    def __init__(self, llm: BaseChatModel) -> None:
-        self.llm = llm
-
-    def generate_feedback(self, query: str) -> str:
-        template = '''
-        あなたは国際政治演習に参加しているファシリテーターです。
-        以下の資料を元に、簡潔にフィードバックを作成してください。
-
-        資料: """
-        {context}
-        """
-
-        注意:
-        - 500字以内で、専門用語は高校生でもわかるように
-        - 要点を箇条書きで整理したあと、結論を述べる
-        '''
 
 if TYPE_CHECKING:
     from langchain_core.runnables import Runnable
@@ -59,9 +40,9 @@ class ReporterAgent:
         return chain.invoke(query)
 
 
-class CriticContent(BaseModel):
-    pros: str = Field(..., description="論点の利点")
-    cons: str = Field(..., description="論点の欠点")
+# class CriticContent(BaseModel):
+#     pros: str = Field(..., description="論点の利点")
+#     cons: str = Field(..., description="論点の欠点")
 
 
 class CriticAgent:
