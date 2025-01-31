@@ -40,6 +40,28 @@ class ReporterAgent:
 
         return chain.invoke(query)
 
+    def check_cases(self, case: str) -> str:
+        template = '''
+        あなたは国際政治演習に参加している報告担当の生徒です。
+        以下の資料を元に、{case}の言説をサポートする具体的事例について報告してください。
+
+        資料: """
+        {context}
+        """
+
+        注意:
+        - 500字以内で、専門用語は高校生でもわかるように
+        - 要点を箇条書きで整理したあと、結論を述べる
+        '''
+
+        prompt = PromptTemplate(template=template, input_variables=["context", "case"])
+        content = self.retriever.invoke(case)
+        model = self.llm
+
+        chain: Runnable = prompt | model | StrOutputParser()
+
+        return chain.invoke({"context": content, "case": case})
+
 
 class CriticPoint(BaseModel):
     title: str

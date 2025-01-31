@@ -17,14 +17,9 @@ from agent import CriticAgent, CriticContent, ReporterAgent
 from retrievers import create_tavily_search_api_retriever
 
 
-class ProsCons(Enum):
-    PROS = "pros"
-    CONS = "cons"
-
-
 class HumanSelection(BaseModel):
-    selection_num: int = Field(..., description="選択された回答番号")
-    pros_cons: ProsCons = Field(..., description="選択された回答の利点か欠点か")
+    point_num: int = Field(..., description="選択された回答番号")
+    case_num: int = Field(..., description="選択されたケース番号")
 
 
 class State(BaseModel):
@@ -33,9 +28,10 @@ class State(BaseModel):
     reporter_content: str = Field(default="", description="reporterの回答内容")
     critic_content: CriticContent = Field(default=None, description="criticの回答内容")
     human_selection: HumanSelection = Field(
-        default=HumanSelection(selection_num=0, pros_cons=ProsCons.CONS),
+        default=HumanSelection(point_num=0, case_num=0),
         description="humanの選択内容",
     )
+    check_content: str = Field(default="", description="checkの回答内容")
     thead_id: str = Field(default="", description="スレッドID")
 
 
@@ -85,14 +81,19 @@ class AgentClassroom:
 
     def human_node(self, state: State) -> dict[str, Any]:
         query = state.query
-        human_selection = HumanSelection(selection_num=0, pros_cons=ProsCons.CONS)
+        human_selection = HumanSelection(point_num=0, case_num=0)
 
         return {"query": query, "current_role": "human", "human_selection": human_selection}
 
     def check_node(self, state: State) -> dict[str, Any]:
         query = state.query
+        critic_case = state.critic_content.points[state.human_selection.point_num].cases[
+            state.human_selection.case_num
+        ]
+        repoter = self.reporter
+        generated_text = repoter.check_cases(critic_case)
 
-        return {"query": query, "current_role": "check"}
+        return {"query": query, "current_role": "check", "check_content": generated_text}
 
     def show_image(self):
         img_data = Image(self.graph.get_graph().draw_mermaid_png())
@@ -115,7 +116,15 @@ def main():
     config = {"configurable": {"thread_id": "1"}}
     result = agent.graph.invoke(init_state, config)
 
-    pprint(result)
+    print("#################################################################")
+    pprint(result["reporter_content"])
+    print("#################################################################")
+    pprint(result["critic_content"])
+
+    second_result = agent.graph.invoke(None, config)
+
+    print("#################################################################")
+    pprint(second_result["check_content"])
 
 
 if __name__ == "__main__":
