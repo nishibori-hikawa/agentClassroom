@@ -71,7 +71,7 @@ class CriticAgent:
             partial_variables={"format_instructions": parser.get_format_instructions()},
         )
         model = self.llm
-        chain = prompt | model
+        chain = prompt | model | StrOutputParser()
 
         return chain.invoke({"report_text": report_text, "context": context})
 
