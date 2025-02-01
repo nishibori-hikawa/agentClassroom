@@ -7,7 +7,9 @@ from utils import extract_text_from_pdf, text_to_documents
 
 
 def create_tavily_search_api_retriever() -> TavilySearchAPIRetriever:
-    return TavilySearchAPIRetriever(k=3)
+    return TavilySearchAPIRetriever(
+        k=3, search_depth="advanced", include_raw_content=True, include_domains=[]
+    )
 
 
 def create_pdf_retriever(file_path: str) -> BaseRetriever:

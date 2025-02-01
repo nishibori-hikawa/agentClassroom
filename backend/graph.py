@@ -1,7 +1,8 @@
+import asyncio
 import os
 from enum import Enum
 from pprint import pprint
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from dotenv import load_dotenv
 from IPython.display import Image, display
@@ -60,41 +61,53 @@ class AgentClassroom:
 
         return workflow.compile(checkpointer=self.memory, interrupt_before=["human"])
 
-    def reporter_node(self, state: State) -> dict[str, Any]:
-        print("reporter_node")
+    async def reporter_node(self, state: State) -> AsyncGenerator[dict[str, Any], None]:
         query = state.query
+        accumulated_content = ""
 
         reporter = self.reporter
-        generated_text = reporter.generate_report(query)
+        async for token in reporter.generate_report_stream(query):
+            accumulated_content += token
+            state.reporter_content = accumulated_content
+            yield {
+                "query": query,
+                "current_role": "reporter",
+                "reporter_content": accumulated_content,  # Send only the new token
+                "stream": True,
+            }
 
-        return {
+        state.reporter_content = accumulated_content
+        # Yield final state after streaming is complete
+        yield {
             "query": query,
             "current_role": "reporter",
-            "reporter_content": generated_text,
+            "reporter_content": accumulated_content,
+            "stream": False,  # Indicate this is the final state
         }
 
     def critic_node(self, state: State) -> dict[str, Any]:
-        print("critic_node")
         query = state.query
         report_text = state.reporter_content
 
         critic = self.critic
         generated_text = critic.generate_critique(report_text)
 
-        return {"query": query, "current_role": "critic", "critic_content": generated_text}
+        return {
+            "query": query,
+            "current_role": "critic",
+            "reporter_content": report_text,
+            "critic_content": generated_text,
+        }
 
     def human_node(self, state: State) -> dict[str, Any]:
-        print("human_node")
         query = state.query
         human_selection = state.human_selection
 
         return {"query": query, "current_role": "human", "human_selection": human_selection}
 
     def check_node(self, state: State) -> dict[str, Any]:
-        print("check_node")
         query = state.query
-        print(state.human_selection)
-        print(state.critic_content)
+
         critic_case = state.critic_content.points[state.human_selection.point_num].cases[
             state.human_selection.case_num
         ]
@@ -113,29 +126,22 @@ class AgentClassroom:
         os.system(f"code {file_path}")
 
 
-def main():
+async def main():
     load_dotenv()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    # llm = VertexAI(model="gemini-1.5-flash-001", temperature=0)
-    # retriever = create_pdf_retriever("./documents/main.pdf")
     retriever = create_tavily_search_api_retriever()
     agent = AgentClassroom(llm, retriever)
-    init_state = State(query="トランプの経済政策")
+    init_state = State(query="国民民主党の経済政策")
     config = {"configurable": {"thread_id": "1"}}
-    result = agent.graph.invoke(init_state, config)
 
-    print("#################################################################")
-    pprint(result["reporter_content"])
-    print("#################################################################")
-    pprint(result["critic_content"])
-
-    human_selection = HumanSelection(point_num=1, case_num=1)
-    agent.graph.update_state(values={"human_selection": human_selection}, config=config)
-    second_result = agent.graph.invoke(None, config)
-
-    print("#################################################################")
-    pprint(second_result["check_content"])
+    async for event in agent.graph.astream_events(init_state, config, version="v1"):
+        chunk = event.get("data", {}).get("chunk", {})
+        try:
+            state = State(**chunk)
+            pprint(state.reporter_content)
+        except Exception as e:
+            continue
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
