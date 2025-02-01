@@ -122,19 +122,22 @@ def main():
     agent = AgentClassroom(llm, retriever)
     init_state = State(query="トランプの経済政策")
     config = {"configurable": {"thread_id": "1"}}
-    result = agent.graph.invoke(init_state, config)
+    # result = agent.graph.invoke(init_state, config)
 
-    print("#################################################################")
-    pprint(result["reporter_content"])
-    print("#################################################################")
-    pprint(result["critic_content"])
+    # print("#################################################################")
+    # pprint(result["reporter_content"])
+    # print("#################################################################")
+    # pprint(result["critic_content"])
 
-    human_selection = HumanSelection(point_num=1, case_num=1)
-    agent.graph.update_state(values={"human_selection": human_selection}, config=config)
-    second_result = agent.graph.invoke(None, config)
+    # human_selection = HumanSelection(point_num=1, case_num=1)
+    # agent.graph.update_state(values={"human_selection": human_selection}, config=config)
+    # second_result = agent.graph.invoke(None, config)
 
-    print("#################################################################")
-    pprint(second_result["check_content"])
+    # print("#################################################################")
+    # pprint(second_result["check_content"])
+
+    for i in agent.graph.stream(init_state, config):
+        pprint(i)
 
 
 if __name__ == "__main__":

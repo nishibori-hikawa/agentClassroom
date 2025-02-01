@@ -32,6 +32,17 @@ class ReporterAgent:
 
         return chain.invoke(query)
 
+    async def generate_report_stream(self, query: str) -> AsyncGenerator[str, None]:
+        prompt = PromptTemplate(
+            template=GENERATE_REPORT_TEMPLATE, input_variables=["context", "question"]
+        )
+        model = self.llm
+
+        chain: Runnable = {"context": self.retriever} | prompt | model | StrOutputParser()
+
+        async for result in chain.invoke_stream(query):
+            yield result
+
     def check_cases(self, case: str) -> str:
         prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])
         content = self.retriever.invoke(case)

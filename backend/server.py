@@ -3,6 +3,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
@@ -59,6 +60,39 @@ async def invoke(request: GraphRequest) -> State:
     except Exception as e:
         logging.error(f"Error invoking graph: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def event_stream(request: GraphRequest):
+    state = request.state
+    config = {"configurable": {"thread_id": request.thread_id}}
+    try:
+        if request.first_call:
+            for chunk in graph.graph.stream(state.model_dump(), config):
+                for node_name, node_results in chunk.items():
+                    for message in node_results.get("messages", []):
+                        if not message.get("content"):
+                            continue
+                        event_str = "event: ai_event"
+                        data_str = f"data: {message['content']}"
+                        yield f"{event_str}\n{data_str}\n\n"
+        else:
+            graph.graph.update_state(values=state.model_dump(), config=config)
+            for chunk in graph.graph.stream(None, config):
+                for node_name, node_results in chunk.items():
+                    for message in node_results.get("messages", []):
+                        if not message.get("content"):
+                            continue
+                        event_str = "event: ai_event"
+                        data_str = f"data: {message['content']}"
+                        yield f"{event_str}\n{data_str}\n\n"
+    except Exception as e:
+        logging.error(f"Error invoking graph: {e}")
+        yield f"event: error\ndata: {str(e)}\n\n"
+
+
+@app.post("/stream")
+async def stream(request: GraphRequest) -> StreamingResponse:
+    return StreamingResponse(event_stream(request=request), media_type="text/event-stream")
 
 
 if __name__ == "__main__":
