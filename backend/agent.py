@@ -95,18 +95,51 @@ class CriticAgent:
     def __init__(self, llm: BaseChatModel) -> None:
         self.llm = llm
 
-    def generate_critique(self, report_text: str) -> dict:
+    def generate_critique(
+        self,
+        report_text: str,
+        critic_content: CriticContent,
+        critic_content_feedback: str,
+    ) -> dict:
         parser = PydanticOutputParser(pydantic_object=CriticContent)
         prompt = ChatPromptTemplate.from_template(
             template=CRITIQUE_TEMPLATE,
-            partial_variables={"format_instructions": parser.get_format_instructions()},
+            input_variables={
+                "format_instructions",
+                "report_text",
+                "critic_content",
+                "critic_content_feedback",
+            },
         )
 
         # Create chain
         chain = prompt | self.llm | parser
 
         # Execute chain and return result
-        return chain.invoke({"report_text": report_text})
+        return chain.invoke(
+            {
+                "format_instructions": parser.get_format_instructions(),
+                "report_text": report_text,
+                "critic_content": critic_content.model_dump_json(),
+                "critic_content_feedback": critic_content_feedback,
+            }
+        )
+
+
+class TeachingAssistantAgent:
+    def __init__(self, llm: BaseChatModel) -> None:
+        self.llm = llm
+
+    def feedback_critic_content(self, critic_content: CriticContent) -> str:
+        prompt = ChatPromptTemplate.from_template(
+            template=CRITIQUE_TEMPLATE,
+            input_variables=["critic_content"],
+        )
+        model = self.llm
+
+        chain: Runnable = prompt | model | StrOutputParser()
+
+        return chain.invoke({"critic_content": critic_content.model_dump_json()})
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import asyncio
 import os
 from enum import Enum
 from pprint import pprint
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Literal
 
 from dotenv import load_dotenv
 from IPython.display import Image, display
@@ -11,10 +11,10 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_google_vertexai import VertexAI
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph.state import CompiledGraph, StateGraph
+from langgraph.graph.state import END, CompiledGraph, StateGraph
 from pydantic import BaseModel, Field
 
-from agent import CriticAgent, CriticContent, ReporterAgent
+from agent import CriticAgent, CriticContent, ReporterAgent, TeachingAssistantAgent
 from retrievers import create_tavily_search_api_retriever
 
 
@@ -28,8 +28,10 @@ class State(BaseModel):
     current_role: str = Field(default="", description="選定された回答ロール")
     reporter_content: str = Field(default="", description="reporterの回答内容")
     critic_content: CriticContent = Field(
-        default_factory=CriticContent, description="criticの回答内容"
+        default_factory=CriticContent,
+        description="criticの回答内容",
     )
+    critic_content_feedback: str = Field(default="", description="criticの回答内容のフィードバック")
     human_selection: HumanSelection = Field(
         default=HumanSelection(point_num=0, case_num=0),
         description="humanの選択内容",
@@ -44,6 +46,7 @@ class AgentClassroom:
         self.retriever = retriever
         self.reporter = ReporterAgent(retriever, llm)
         self.critic = CriticAgent(llm)
+        self.ta = TeachingAssistantAgent(llm)
         self.memory = MemorySaver()
         self.graph = self._create_graph()
 
@@ -52,11 +55,22 @@ class AgentClassroom:
 
         workflow.add_node("reporter", self.reporter_node)
         workflow.add_node("critic", self.critic_node)
+        workflow.add_node("feedback_critic", self.feedback_critic_node)
         workflow.add_node("human", self.human_node)
         workflow.add_node("check", self.check_node)
+
         workflow.add_edge("reporter", "critic")
-        workflow.add_edge("critic", "human")
+
+        def should_continue(state: State) -> Literal["feedback_critic", "human"]:
+            if state.critic_content_feedback != "":
+                return "human"
+            return "feedback_critic"
+
+        workflow.add_conditional_edges("critic", should_continue)
+        workflow.add_edge("feedback_critic", "critic")
         workflow.add_edge("human", "check")
+        workflow.add_edge("check", END)
+
         workflow.set_entry_point("reporter")
 
         return workflow.compile(checkpointer=self.memory, interrupt_before=["human"])
@@ -88,15 +102,33 @@ class AgentClassroom:
     def critic_node(self, state: State) -> dict[str, Any]:
         query = state.query
         report_text = state.reporter_content
+        critic_content = state.critic_content
+        critic_content_feedback = state.critic_content_feedback
 
         critic = self.critic
-        generated_text = critic.generate_critique(report_text)
+        generated_text = critic.generate_critique(
+            report_text, critic_content, critic_content_feedback
+        )
 
         return {
             "query": query,
             "current_role": "critic",
             "reporter_content": report_text,
             "critic_content": generated_text,
+        }
+
+    def feedback_critic_node(self, state: State) -> dict[str, Any]:
+        query = state.query
+        report_text = state.reporter_content
+
+        ta = self.ta
+        critic_content_feedback = ta.feedback_critic_content(state.critic_content)
+
+        return {
+            "query": query,
+            "current_role": "critic",
+            "reporter_content": report_text,
+            "critic_content_feedback": critic_content_feedback,
         }
 
     def human_node(self, state: State) -> dict[str, Any]:
@@ -124,7 +156,7 @@ class AgentClassroom:
 
         return {
             "query": query,
-            "current_role": "human",
+            "current_role": "check",
             "reporter_content": state.reporter_content,
             "critic_content": state.critic_content,
             "human_selection": state.human_selection,
@@ -147,7 +179,9 @@ async def main():
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     retriever = create_tavily_search_api_retriever()
     agent = AgentClassroom(llm, retriever)
-    init_state = State(query="国民民主党の経済政策")
+
+    # agent.show_image()
+    init_state = State(query="トランプの経済政策")
     config = {"configurable": {"thread_id": "1"}}
 
     async for event in agent.graph.astream_events(init_state, config, version="v1"):
