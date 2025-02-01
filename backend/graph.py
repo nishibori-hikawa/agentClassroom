@@ -103,7 +103,15 @@ class AgentClassroom:
         query = state.query
         human_selection = state.human_selection
 
-        return {"query": query, "current_role": "human", "human_selection": human_selection}
+        return {
+            "query": query,
+            "current_role": "human",
+            "reporter_content": state.reporter_content,
+            "critic_content": state.critic_content,
+            "human_selection": human_selection,
+            "check_content": state.check_content,
+            "thead_id": state.thead_id,
+        }
 
     def check_node(self, state: State) -> dict[str, Any]:
         query = state.query
