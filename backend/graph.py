@@ -59,6 +59,7 @@ class AgentClassroom:
         return workflow.compile(checkpointer=self.memory, interrupt_before=["human"])
 
     def reporter_node(self, state: State) -> dict[str, Any]:
+        print("reporter_node")
         query = state.query
 
         reporter = self.reporter
@@ -71,6 +72,7 @@ class AgentClassroom:
         }
 
     def critic_node(self, state: State) -> dict[str, Any]:
+        print("critic_node")
         query = state.query
         report_text = state.reporter_content
 
@@ -80,12 +82,14 @@ class AgentClassroom:
         return {"query": query, "current_role": "critic", "critic_content": generated_text}
 
     def human_node(self, state: State) -> dict[str, Any]:
+        print("human_node")
         query = state.query
-        human_selection = HumanSelection(point_num=0, case_num=0)
+        human_selection = state.human_selection
 
         return {"query": query, "current_role": "human", "human_selection": human_selection}
 
     def check_node(self, state: State) -> dict[str, Any]:
+        print("check_node")
         query = state.query
         critic_case = state.critic_content.points[state.human_selection.point_num].cases[
             state.human_selection.case_num
@@ -112,7 +116,7 @@ def main():
     # retriever = create_pdf_retriever("./documents/main.pdf")
     retriever = create_tavily_search_api_retriever()
     agent = AgentClassroom(llm, retriever)
-    init_state = State(query="トランプの経済政策", thread_id=1)
+    init_state = State(query="トランプの経済政策")
     config = {"configurable": {"thread_id": "1"}}
     result = agent.graph.invoke(init_state, config)
 
@@ -121,6 +125,8 @@ def main():
     print("#################################################################")
     pprint(result["critic_content"])
 
+    human_selection = HumanSelection(point_num=1, case_num=1)
+    agent.graph.update_state(values={"human_selection": human_selection}, config=config)
     second_result = agent.graph.invoke(None, config)
 
     print("#################################################################")
