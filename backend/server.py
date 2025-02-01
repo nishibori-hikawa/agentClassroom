@@ -5,7 +5,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langserve import add_routes
 
 from graph import AgentClassroom
-from retrievers import create_pdf_retriever
+from retrievers import create_tavily_search_api_retriever
 
 load_dotenv()
 
@@ -16,15 +16,9 @@ app = FastAPI(
 )
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-retriever = create_pdf_retriever("./documents/main.pdf")
+retriever = create_tavily_search_api_retriever()
 memory = MemorySaver()
 graph = AgentClassroom(llm, retriever, memory)
-
-add_routes(
-    app,
-    llm,
-    path="/openai",
-)
 
 add_routes(
     app,
