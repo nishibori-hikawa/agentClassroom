@@ -32,6 +32,39 @@ const DiscussionContainer: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<'initial' | 'report' | 'points' | 'final'>('initial');
   const [error, setError] = useState<string | null>(null);
 
+  const processStream = async (response: Response) => {
+    const reader = response.body?.getReader();
+    if (!reader) return;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const text = new TextDecoder().decode(value);
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      for (const line of lines) {
+        try {
+          const newState = JSON.parse(line);
+          setState(prevState => ({
+            ...prevState,
+            ...newState
+          }));
+          
+          if (newState.current_role === 'reporter') {
+            setCurrentStep('report');
+          } else if (newState.current_role === 'critic') {
+            setCurrentStep('points');
+          } else if (newState.current_role === 'check') {
+            setCurrentStep('final');
+          }
+        } catch (e) {
+          console.error('Error parsing stream data:', e);
+        }
+      }
+    }
+  };
+
   const handleTopicSubmit = async (topic: string) => {
     setLoading(true);
     setError(null);
@@ -40,7 +73,7 @@ const DiscussionContainer: React.FC = () => {
         throw new Error('バックエンドURLが設定されていません。環境変数を確認してください。');
       }
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/graph`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -54,9 +87,7 @@ const DiscussionContainer: React.FC = () => {
         throw new Error(`APIエラー: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      setState(data);
-      setCurrentStep('report');
+      await processStream(response);
     } catch (error) {
       console.error('Error starting discussion:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
@@ -73,7 +104,7 @@ const DiscussionContainer: React.FC = () => {
         throw new Error('バックエンドURLが設定されていません。環境変数を確認してください。');
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/graph`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -93,9 +124,7 @@ const DiscussionContainer: React.FC = () => {
         throw new Error(`APIエラー: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      setState(data);
-      setCurrentStep('final');
+      await processStream(response);
     } catch (error) {
       console.error('Error selecting case:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
@@ -209,7 +238,6 @@ const DiscussionContainer: React.FC = () => {
         </Grid>
       )}
 
-      {/* Teaching Assistant Card */}
       {currentStep === 'final' && state.check_content && (
         <Grid item xs={12}>
           <Card sx={{ mb: 2, backgroundColor: '#f5f5f5' }}>
