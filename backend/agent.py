@@ -11,7 +11,12 @@ from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from templates import CHECK_CASES_TEMPLATE, CRITIQUE_TEMPLATE, GENERATE_REPORT_TEMPLATE
+from templates import (
+    CHECK_CASES_TEMPLATE,
+    CRITIQUE_TEMPLATE,
+    GENERATE_REPORT_TEMPLATE,
+    FIX_CRITIQUE_TEMPLATE,
+)
 
 if TYPE_CHECKING:
     from langchain_core.runnables import Runnable
@@ -104,12 +109,6 @@ class CriticAgent:
         parser = PydanticOutputParser(pydantic_object=CriticContent)
         prompt = ChatPromptTemplate.from_template(
             template=CRITIQUE_TEMPLATE,
-            input_variables={
-                "format_instructions",
-                "report_text",
-                "critic_content",
-                "critic_content_feedback",
-            },
         )
 
         # Create chain
@@ -132,8 +131,7 @@ class TeachingAssistantAgent:
 
     def feedback_critic_content(self, critic_content: CriticContent) -> str:
         prompt = ChatPromptTemplate.from_template(
-            template=CRITIQUE_TEMPLATE,
-            input_variables=["critic_content"],
+            template=FIX_CRITIQUE_TEMPLATE,
         )
         model = self.llm
 
