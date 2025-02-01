@@ -122,7 +122,15 @@ class AgentClassroom:
         repoter = self.reporter
         generated_text = repoter.check_cases(critic_case)
 
-        return {"query": query, "current_role": "check", "check_content": generated_text}
+        return {
+            "query": query,
+            "current_role": "human",
+            "reporter_content": state.reporter_content,
+            "critic_content": state.critic_content,
+            "human_selection": state.human_selection,
+            "check_content": generated_text,
+            "thead_id": state.thead_id,
+        }
 
     def show_image(self):
         img_data = Image(self.graph.get_graph().draw_mermaid_png())
