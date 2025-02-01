@@ -207,8 +207,8 @@ const DiscussionContainer: React.FC = () => {
                         sx={{ 
                           flex: '1 1 auto',
                           backgroundColor: 
-                            state.human_selection?.point_num === pointIndex + 1 && 
-                            state.human_selection?.case_num === caseIndex + 1 
+                            state.human_selection?.point_num === pointIndex && 
+                            state.human_selection?.case_num === caseIndex 
                               ? '#e3f2fd' 
                               : 'inherit'
                         }}
