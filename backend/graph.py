@@ -18,15 +18,17 @@ from retrievers import create_tavily_search_api_retriever
 
 
 class HumanSelection(BaseModel):
-    point_num: int = Field(..., description="選択された回答番号")
-    case_num: int = Field(..., description="選択されたケース番号")
+    point_num: int = Field(0, description="選択された回答番号")
+    case_num: int = Field(0, description="選択されたケース番号")
 
 
 class State(BaseModel):
     query: str = Field(..., description="ユーザーからの質問")
     current_role: str = Field(default="", description="選定された回答ロール")
     reporter_content: str = Field(default="", description="reporterの回答内容")
-    critic_content: CriticContent = Field(default=None, description="criticの回答内容")
+    critic_content: CriticContent = Field(
+        default_factory=CriticContent, description="criticの回答内容"
+    )
     human_selection: HumanSelection = Field(
         default=HumanSelection(point_num=0, case_num=0),
         description="humanの選択内容",
@@ -91,6 +93,8 @@ class AgentClassroom:
     def check_node(self, state: State) -> dict[str, Any]:
         print("check_node")
         query = state.query
+        print(state.human_selection)
+        print(state.critic_content)
         critic_case = state.critic_content.points[state.human_selection.point_num].cases[
             state.human_selection.case_num
         ]
