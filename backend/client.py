@@ -11,7 +11,7 @@ class GraphRequest(BaseModel):
 
 
 # サーバーのURL
-url = "http://localhost:8080/graph"
+url = "http://localhost:8000/graph"
 
 # 初期状態を設定
 initial_state = State(query="トランプの経済政策について")
