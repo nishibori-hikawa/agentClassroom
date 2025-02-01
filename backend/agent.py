@@ -33,15 +33,42 @@ class ReporterAgent:
         return chain.invoke(query)
 
     async def generate_report_stream(self, query: str) -> AsyncGenerator[str, None]:
+        print("Debug - Starting generate_report_stream")  # デバッグ出力
         prompt = PromptTemplate(
             template=GENERATE_REPORT_TEMPLATE, input_variables=["context", "question"]
         )
         model = self.llm
 
-        chain: Runnable = {"context": self.retriever} | prompt | model | StrOutputParser()
+        # First get the context
+        try:
+            context = await self.retriever.ainvoke(query)
+            print("Debug - Retrieved context:", context)  # デバッグ出力
+        except Exception as e:
+            print("Debug - Error retrieving context:", str(e))  # デバッグ出力
+            context = "No context available due to retrieval error."
 
-        async for result in chain.invoke_stream(query):
-            yield result
+        # Format the prompt first
+        formatted_prompt = prompt.format(context=context, question=query)
+        print("Debug - Formatted prompt:", formatted_prompt)  # デバッグ出力
+
+        # Create the chain for streaming
+        chain = (model | StrOutputParser()).with_config({"tags": ["reporter_stream"]})
+
+        try:
+            async for chunk in chain.astream_events(
+                formatted_prompt,
+                version="v1",
+            ):
+                if (
+                    chunk["event"] == "on_chat_model_stream"
+                    and chunk.get("data", {}).get("chunk", {}).content
+                ):
+                    content = chunk["data"]["chunk"].content
+                    print("Debug - Streaming chunk:", content)  # デバッグ出力
+                    yield content
+        except Exception as e:
+            print("Debug - Error in streaming:", str(e))  # デバッグ出力
+            yield f"Error during streaming: {str(e)}"
 
     def check_cases(self, case: str) -> str:
         prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])

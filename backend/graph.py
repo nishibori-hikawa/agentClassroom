@@ -2,6 +2,7 @@ import os
 from enum import Enum
 from pprint import pprint
 from typing import Any
+import asyncio
 
 from dotenv import load_dotenv
 from IPython.display import Image, display
@@ -60,17 +61,27 @@ class AgentClassroom:
 
         return workflow.compile(checkpointer=self.memory, interrupt_before=["human"])
 
-    def reporter_node(self, state: State) -> dict[str, Any]:
+    async def reporter_node(self, state: State) -> dict[str, Any]:
         print("reporter_node")
         query = state.query
+        accumulated_content = ""
 
         reporter = self.reporter
-        generated_text = reporter.generate_report(query)
+        async for token in reporter.generate_report_stream(query):
+            accumulated_content += token
+            yield {
+                "query": query,
+                "current_role": "reporter",
+                "reporter_content": accumulated_content,  # Send only the new token
+                "stream": True,
+            }
 
-        return {
+        # Yield final state after streaming is complete
+        yield {
             "query": query,
             "current_role": "reporter",
-            "reporter_content": generated_text,
+            "reporter_content": accumulated_content,
+            "stream": False,  # Indicate this is the final state
         }
 
     def critic_node(self, state: State) -> dict[str, Any]:
@@ -113,32 +124,27 @@ class AgentClassroom:
         os.system(f"code {file_path}")
 
 
-def main():
+async def main():
     load_dotenv()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    # llm = VertexAI(model="gemini-1.5-flash-001", temperature=0)
-    # retriever = create_pdf_retriever("./documents/main.pdf")
     retriever = create_tavily_search_api_retriever()
     agent = AgentClassroom(llm, retriever)
     init_state = State(query="トランプの経済政策")
     config = {"configurable": {"thread_id": "1"}}
-    # result = agent.graph.invoke(init_state, config)
 
-    # print("#################################################################")
-    # pprint(result["reporter_content"])
-    # print("#################################################################")
-    # pprint(result["critic_content"])
-
-    # human_selection = HumanSelection(point_num=1, case_num=1)
-    # agent.graph.update_state(values={"human_selection": human_selection}, config=config)
-    # second_result = agent.graph.invoke(None, config)
-
-    # print("#################################################################")
-    # pprint(second_result["check_content"])
-
-    for i in agent.graph.stream(init_state, config):
-        pprint(i)
+    async for event in agent.graph.astream(init_state, config):
+        if "reporter" in event:
+            if event["reporter"].get("stream"):
+                # Print just the new token
+                print(event["reporter"]["reporter_content"], end="", flush=True)
+            else:
+                # This is the final state
+                print()  # Add a newline
+                print("Reporter finished.")
+        else:
+            print()  # Add a newline before other outputs
+            pprint(event)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
