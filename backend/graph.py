@@ -129,6 +129,7 @@ class AgentClassroom:
             "query": query,
             "current_role": "critic",
             "reporter_content": report_text,
+            "critic_content": state.critic_content,
             "critic_content_feedback": critic_content_feedback,
         }
 
