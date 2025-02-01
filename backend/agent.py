@@ -8,7 +8,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from langchain_core.runnables import Runnable
@@ -69,7 +69,7 @@ class CriticPoint(BaseModel):
 
 
 class CriticContent(BaseModel):
-    points: list[CriticPoint]
+    points: list[CriticPoint] = Field(default_factory=list)
 
 
 class CriticAgent:
