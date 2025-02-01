@@ -1,211 +1,238 @@
-import React, { useState, useEffect } from 'react';
-import { Box, CircularProgress, Button, TextField, Typography, List, ListItem, ListItemText } from '@mui/material';
-import ReportForm from './ReportForm';
-import TAMessages from './TAMessages';
+import React, { useState } from 'react';
+import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Grid, Alert } from '@mui/material';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
-interface NewsItem {
+interface CriticPoint {
   title: string;
-  description: string;
-  link: string;
+  cases: [string, string];
+}
+
+interface CriticContent {
+  points: CriticPoint[];
+}
+
+interface State {
+  query: string;
+  current_role?: string;
+  reporter_content?: string;
+  critic_content?: CriticContent;
+  human_selection?: {
+    point_num: number;
+    case_num: number;
+  };
+  case_report?: string;
+  check_content?: string;
+  thread_id?: string;
 }
 
 const DiscussionContainer: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<'auto' | 'interactive'>('auto');
-  const [currentStep, setCurrentStep] = useState<'initial' | 'report' | 'critic' | 'completed'>('initial');
-  const [report, setReport] = useState('');
-  const [reportFeedback, setReportFeedback] = useState('');
-  const [criticPoints, setCriticPoints] = useState<string[]>([]);
-  const [criticFeedback, setCriticFeedback] = useState('');
-  const [taMessage, setTaMessage] = useState('');
-  const [newsSuggestions, setNewsSuggestions] = useState<NewsItem[]>([]);
+  const [state, setState] = useState<State>({ query: '' });
+  const [currentStep, setCurrentStep] = useState<'initial' | 'report' | 'points' | 'final'>('initial');
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchNewsSuggestions();
-  }, []);
-
-  const fetchNewsSuggestions = async () => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/news_suggestions`);
-      const data = await response.json();
-      setNewsSuggestions(data.news_items);
-    } catch (error) {
-      console.error('Error fetching news suggestions:', error);
-    }
-  };
-
-  const handleNewsSelect = async (title: string) => {
-    await handleDiscussionStart(title);
-  };
-
-  const handleDiscussionStart = async (topic: string) => {
+  const handleTopicSubmit = async (topic: string) => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/run_discussion`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_topic: topic, mode }),
-      });
-      const data = await response.json();
-
-      if (mode === 'auto') {
-        setReport(data.report);
-        setCriticPoints(data.critic_points);
-        setTaMessage(data.ta_message);
-        setCurrentStep('completed');
-      } else {
-        setReport(data.report);
-        setCurrentStep('report');
+      if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
+        throw new Error('バックエンドURLが設定されていません。環境変数を確認してください。');
       }
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/graph`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_call: true,
+          state: { query: topic },
+          thread_id: 1
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`APIエラー: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setState(data);
+      setCurrentStep('report');
     } catch (error) {
-      console.error('Error in discussion:', error);
+      console.error('Error starting discussion:', error);
+      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReportFeedback = async () => {
+  const handleCaseSelect = async (pointNum: number, caseNum: number) => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/submit_report_feedback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ report_text: report, user_feedback: reportFeedback }),
-      });
-      const data = await response.json();
-      setCriticPoints(data.points);
-      setCurrentStep('critic');
-    } catch (error) {
-      console.error('Error submitting report feedback:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
+        throw new Error('バックエンドURLが設定されていません。環境変数を確認してください。');
+      }
 
-  const handleCriticFeedback = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/submit_critic_feedback`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/graph`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ points: criticPoints, user_feedback: criticFeedback }),
+        body: JSON.stringify({
+          first_call: false,
+          state: {
+            ...state,
+            human_selection: {
+              point_num: pointNum,
+              case_num: caseNum
+            }
+          },
+          thread_id: 1
+        }),
       });
+
+      if (!response.ok) {
+        throw new Error(`APIエラー: ${response.status} ${response.statusText}`);
+      }
+
       const data = await response.json();
-      setTaMessage(data.ta_message);
-      setCurrentStep('completed');
+      setState(data);
+      setCurrentStep('final');
     } catch (error) {
-      console.error('Error submitting critic feedback:', error);
+      console.error('Error selecting case:', error);
+      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Box>
-      {currentStep === 'initial' && (
-        <>
-          <Button
-            variant={mode === 'auto' ? 'contained' : 'outlined'}
-            onClick={() => setMode('auto')}
-            sx={{ mr: 2, mb: 2 }}
-          >
-            自動モード
-          </Button>
-          <Button
-            variant={mode === 'interactive' ? 'contained' : 'outlined'}
-            onClick={() => setMode('interactive')}
-            sx={{ mb: 2 }}
-          >
-            インタラクティブモード
-          </Button>
+    <Grid container spacing={3}>
+      {error && (
+        <Grid item xs={12}>
+          <Alert severity="error" onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        </Grid>
+      )}
 
-          <Typography variant="h6" gutterBottom>
-            最新のニューストピック
-          </Typography>
-          <List>
-            {newsSuggestions.map((news, index) => (
-              <ListItem
-                key={index}
-                button
-                onClick={() => handleNewsSelect(news.title)}
-                sx={{
-                  border: '1px solid #e0e0e0',
-                  borderRadius: 1,
-                  mb: 1,
-                  '&:hover': {
-                    backgroundColor: '#f5f5f5'
-                  }
-                }}
-              >
-                <ListItemText
-                  primary={news.title}
-                  secondary={news.description}
+      {/* Reporter Card */}
+      <Grid item xs={12}>
+        <Card sx={{ mb: 2, backgroundColor: currentStep === 'initial' ? '#f5f5f5' : 'white' }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Reporter
+            </Typography>
+            {currentStep === 'initial' ? (
+              <Box>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  トピックを入力して、調査を開始します
+                </Typography>
+                <TextField
+                  fullWidth
+                  value={state.query}
+                  onChange={(e) => setState({ ...state, query: e.target.value })}
+                  placeholder="議論したいトピックを入力"
+                  sx={{ mb: 2 }}
                 />
-              </ListItem>
-            ))}
-          </List>
+                <Button
+                  variant="contained"
+                  onClick={() => handleTopicSubmit(state.query)}
+                  disabled={!state.query || loading}
+                >
+                  調査を開始
+                </Button>
+              </Box>
+            ) : (
+              state.reporter_content && (
+                <Box sx={{ mt: 2 }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.reporter_content}</ReactMarkdown>
+                </Box>
+              )
+            )}
+          </CardContent>
+        </Card>
+      </Grid>
 
-          <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
-            または、自由にトピックを入力
-          </Typography>
-          <ReportForm onSubmit={handleDiscussionStart} />
-        </>
+      {/* Critic Card */}
+      {state.critic_content?.points && (
+        <Grid item xs={12}>
+          <Card sx={{ mb: 2, backgroundColor: '#f5f5f5' }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Critic
+              </Typography>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                以下の論点から、検討したい視点を選択してください
+              </Typography>
+              {state.critic_content.points.map((point, pointIndex) => (
+                <Box key={pointIndex} sx={{ mb: 3 }}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    {point.title}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {point.cases.map((caseText, caseIndex) => (
+                      <Button
+                        key={caseIndex}
+                        variant="outlined"
+                        onClick={() => handleCaseSelect(pointIndex, caseIndex)}
+                        disabled={loading}
+                        sx={{ 
+                          flex: '1 1 auto',
+                          backgroundColor: 
+                            state.human_selection?.point_num === pointIndex + 1 && 
+                            state.human_selection?.case_num === caseIndex + 1 
+                              ? '#e3f2fd' 
+                              : 'inherit'
+                        }}
+                      >
+                        {caseText}
+                      </Button>
+                    ))}
+                  </Box>
+                </Box>
+              ))}
+            </CardContent>
+          </Card>
+        </Grid>
       )}
 
-      {loading && <CircularProgress />}
-
-      {mode === 'interactive' && currentStep === 'report' && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="h6">レポート内容:</Typography>
-          <Typography>{report}</Typography>
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            value={reportFeedback}
-            onChange={(e) => setReportFeedback(e.target.value)}
-            placeholder="レポートへのフィードバックを入力してください"
-            sx={{ mt: 2 }}
-          />
-          <Button
-            variant="contained"
-            onClick={handleReportFeedback}
-            sx={{ mt: 2 }}
-          >
-            フィードバックを送信
-          </Button>
-        </Box>
+      {/* Case Report Card */}
+      {state.case_report && (
+        <Grid item xs={12}>
+          <Card sx={{ mb: 2, backgroundColor: '#fff' }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                選択された視点の詳細分析
+              </Typography>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.case_report}</ReactMarkdown>
+            </CardContent>
+          </Card>
+        </Grid>
       )}
 
-      {mode === 'interactive' && currentStep === 'critic' && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="h6">Critic Points:</Typography>
-          {criticPoints.map((point, index) => (
-            <Typography key={index}>• {point}</Typography>
-          ))}
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            value={criticFeedback}
-            onChange={(e) => setCriticFeedback(e.target.value)}
-            placeholder="Critic pointsへのフィードバックを入力してください"
-            sx={{ mt: 2 }}
-          />
-          <Button
-            variant="contained"
-            onClick={handleCriticFeedback}
-            sx={{ mt: 2 }}
-          >
-            フィードバックを送信
-          </Button>
-        </Box>
+      {/* Teaching Assistant Card */}
+      {currentStep === 'final' && state.check_content && (
+        <Grid item xs={12}>
+          <Card sx={{ mb: 2, backgroundColor: '#f5f5f5' }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Reporter
+              </Typography>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                選択された視点に基づく分析結果
+              </Typography>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.check_content}</ReactMarkdown>
+            </CardContent>
+          </Card>
+        </Grid>
       )}
 
-      {currentStep === 'completed' && (
-        <TAMessages summary={taMessage} criticPoints={criticPoints} />
+      {/* Loading Indicator */}
+      {loading && (
+        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
+          <CircularProgress />
+        </Grid>
       )}
-    </Box>
+    </Grid>
   );
 };
 

@@ -1,7 +1,9 @@
 import logging
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
@@ -16,8 +18,24 @@ app = FastAPI(
     description="LangchainのRunnableインターフェースを使ったシンプルなAPIサーバー",
 )
 
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# CORSミドルウェアの設定
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # フロントエンドのオリジン
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# GPT-4-turboモデルを使用
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0,
+)
+
+# 検索結果を制限したリトリーバーを作成
 retriever = create_tavily_search_api_retriever()
+
 graph = AgentClassroom(llm, retriever)
 
 
@@ -46,4 +64,4 @@ async def invoke(request: GraphRequest) -> State:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="localhost", port=8080)
+    uvicorn.run("server:app", host="localhost", port=8000, reload=True)
