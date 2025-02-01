@@ -41,8 +41,10 @@ class ReporterAgent:
         # First get the context
         try:
             context = await self.retriever.ainvoke(query)
+            if not context:
+                context = [{"page_content": "No relevant information found.", "metadata": {}}]
         except Exception as e:
-            context = []
+            context = [{"page_content": "Error retrieving information.", "metadata": {}}]
 
         # Format the prompt first
         formatted_prompt = prompt.format(context=context, question=query)
