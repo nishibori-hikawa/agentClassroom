@@ -32,11 +32,12 @@ try:
             decoded_line = line.decode("utf-8")
             try:
                 state = State(**json.loads(decoded_line))
+                res_state = state
                 # print(state.reporter_content)
                 # print(state.critic_content)
             except Exception as e:
                 print(f"Error: {e}")
-            res_state = state
+
 
 except requests.exceptions.ChunkedEncodingError as e:
     print(f"Error: {e}")
@@ -52,16 +53,15 @@ if res_state:
     response = requests.post(url, json=request_data.model_dump(), stream=True)
 
     print("Updated response:")
-    events = []
     try:
         for line in response.iter_lines():
             if line:
                 decoded_line = line.decode("utf-8")
-                print(decoded_line)
-                # state_data = json.loads(decoded_line)
-                # state = State(**state_data)
-                # print(state.check_content)
-                # events.append(state)
-                # res_state = state
+                try:
+                    state = State(**json.loads(decoded_line))
+                    print(state)
+                except Exception as e:
+                    print(f"Error: {e}")
+            res_state = state
     except requests.exceptions.ChunkedEncodingError as e:
         print(f"Error: {e}")

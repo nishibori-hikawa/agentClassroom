@@ -75,8 +75,9 @@ async def event_stream(request: GraphRequest):
                 except Exception as e:
                     continue
         else:
-            graph.graph.update_state(values=state.model_dump(), config=config, version="v1")
-            async for chunk in graph.graph.astream(None, config):
+            graph.graph.update_state(values=state.model_dump(), config=config)
+            async for event in graph.graph.astream_events(None, config, version="v1"):
+                chunk = event.get("data", {}).get("chunk", {})
                 try:
                     state = State(**chunk)
                     yield f"{state.model_dump_json()}\n\n"
