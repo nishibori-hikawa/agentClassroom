@@ -68,11 +68,17 @@ class ReporterAgent:
 
     def check_cases(self, case: str) -> str:
         prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])
-        content = self.retriever.invoke(case)
+        try:
+            content = self.retriever.invoke(case)
+            if not content:
+                content = [
+                    {"page_content": "No relevant information found for this case.", "metadata": {}}
+                ]
+        except Exception as e:
+            content = [{"page_content": f"Error retrieving information: {str(e)}", "metadata": {}}]
+
         model = self.llm
-
         chain: Runnable = prompt | model | StrOutputParser()
-
         return chain.invoke({"context": content, "case": case})
 
 

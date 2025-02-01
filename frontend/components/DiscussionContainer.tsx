@@ -225,14 +225,14 @@ const DiscussionContainer: React.FC = () => {
       )}
 
       {/* Case Report Card */}
-      {state.case_report && (
+      {state.check_content && (
         <Grid item xs={12}>
           <Card sx={{ mb: 2, backgroundColor: '#fff' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 選択された視点の詳細分析
               </Typography>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.case_report}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.check_content}</ReactMarkdown>
             </CardContent>
           </Card>
         </Grid>
