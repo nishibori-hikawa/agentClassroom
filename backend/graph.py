@@ -115,6 +115,7 @@ class AgentClassroom:
             "current_role": "critic",
             "reporter_content": report_text,
             "critic_content": generated_text,
+            "critic_content_feedback": critic_content_feedback,
         }
 
     def feedback_critic_node(self, state: State) -> dict[str, Any]:
@@ -188,7 +189,10 @@ async def main():
         chunk = event.get("data", {}).get("chunk", {})
         try:
             state = State(**chunk)
-            pprint(state.reporter_content)
+            print("critic_content")
+            pprint(state.critic_content)
+            print("critic_content_feedback")
+            pprint(state.critic_content_feedback)
         except Exception as e:
             continue
 
