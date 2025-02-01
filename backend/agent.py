@@ -33,7 +33,6 @@ class ReporterAgent:
         return chain.invoke(query)
 
     async def generate_report_stream(self, query: str) -> AsyncGenerator[str, None]:
-        print("Debug - Starting generate_report_stream")  # デバッグ出力
         prompt = PromptTemplate(
             template=GENERATE_REPORT_TEMPLATE, input_variables=["context", "question"]
         )
@@ -42,14 +41,11 @@ class ReporterAgent:
         # First get the context
         try:
             context = await self.retriever.ainvoke(query)
-            print("Debug - Retrieved context:", context)  # デバッグ出力
         except Exception as e:
-            print("Debug - Error retrieving context:", str(e))  # デバッグ出力
-            context = "No context available due to retrieval error."
+            context = []
 
         # Format the prompt first
         formatted_prompt = prompt.format(context=context, question=query)
-        print("Debug - Formatted prompt:", formatted_prompt)  # デバッグ出力
 
         # Create the chain for streaming
         chain = (model | StrOutputParser()).with_config({"tags": ["reporter_stream"]})
@@ -64,10 +60,8 @@ class ReporterAgent:
                     and chunk.get("data", {}).get("chunk", {}).content
                 ):
                     content = chunk["data"]["chunk"].content
-                    print("Debug - Streaming chunk:", content)  # デバッグ出力
                     yield content
         except Exception as e:
-            print("Debug - Error in streaming:", str(e))  # デバッグ出力
             yield f"Error during streaming: {str(e)}"
 
     def check_cases(self, case: str) -> str:

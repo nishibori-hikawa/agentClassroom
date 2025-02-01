@@ -67,24 +67,21 @@ async def event_stream(request: GraphRequest):
     config = {"configurable": {"thread_id": request.thread_id}}
     try:
         if request.first_call:
-            for chunk in graph.graph.stream(state.model_dump(), config):
-                for node_name, node_results in chunk.items():
-                    for message in node_results.get("messages", []):
-                        if not message.get("content"):
-                            continue
-                        event_str = "event: ai_event"
-                        data_str = f"data: {message['content']}"
-                        yield f"{event_str}\n{data_str}\n\n"
+            async for event in graph.graph.astream_events(state.model_dump(), config, version="v1"):
+                chunk = event.get("data", {}).get("chunk", {})
+                try:
+                    state = State(**chunk)
+                    yield f"{state.model_dump_json()}\n\n"
+                except Exception as e:
+                    continue
         else:
-            graph.graph.update_state(values=state.model_dump(), config=config)
-            for chunk in graph.graph.stream(None, config):
-                for node_name, node_results in chunk.items():
-                    for message in node_results.get("messages", []):
-                        if not message.get("content"):
-                            continue
-                        event_str = "event: ai_event"
-                        data_str = f"data: {message['content']}"
-                        yield f"{event_str}\n{data_str}\n\n"
+            graph.graph.update_state(values=state.model_dump(), config=config, version="v1")
+            async for chunk in graph.graph.astream(None, config):
+                try:
+                    state = State(**chunk)
+                    yield f"{state.model_dump_json()}\n\n"
+                except Exception as e:
+                    continue
     except Exception as e:
         logging.error(f"Error invoking graph: {e}")
         yield f"event: error\ndata: {str(e)}\n\n"
