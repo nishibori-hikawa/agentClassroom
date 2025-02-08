@@ -12,15 +12,17 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from templates import CHECK_CASES_TEMPLATE, CRITIQUE_TEMPLATE, GENERATE_REPORT_TEMPLATE
+from retrievers import create_news_retriever, create_general_retriever
 
 if TYPE_CHECKING:
     from langchain_core.runnables import Runnable
 
 
 class ReporterAgent:
-    def __init__(self, retriever: BaseRetriever, llm: BaseChatModel) -> None:
+    def __init__(self, llm: BaseChatModel) -> None:
         self.llm = llm
-        self.retriever = retriever
+        self.news_retriever = create_news_retriever()
+        self.general_retriever = create_general_retriever()
 
     def generate_report(self, query: str) -> str:
         prompt = PromptTemplate(
@@ -28,7 +30,7 @@ class ReporterAgent:
         )
         model = self.llm
 
-        chain: Runnable = {"context": self.retriever} | prompt | model | StrOutputParser()
+        chain: Runnable = {"context": self.news_retriever} | prompt | model | StrOutputParser()
 
         return chain.invoke(query)
 
@@ -38,9 +40,9 @@ class ReporterAgent:
         )
         model = self.llm
 
-        # First get the context
+        # First get the context using news retriever
         try:
-            context = await self.retriever.ainvoke(query)
+            context = await self.news_retriever.ainvoke(query)
             if not context:
                 context = [{"page_content": "No relevant information found.", "metadata": {}}]
         except Exception as e:
@@ -69,7 +71,7 @@ class ReporterAgent:
     def check_cases(self, case: str) -> str:
         prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])
         try:
-            content = self.retriever.invoke(case)
+            content = self.general_retriever.invoke(case)
             if not content:
                 content = [
                     {"page_content": "No relevant information found for this case.", "metadata": {}}
