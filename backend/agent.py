@@ -43,33 +43,17 @@ class ReporterAgent:
         )
         model = self.llm
 
-        # First get the context
-        try:
-            context = await self.retriever.ainvoke(query)
-            if not context:
-                context = [{"page_content": "No relevant information found.", "metadata": {}}]
-        except Exception as e:
-            context = [{"page_content": "Error retrieving information.", "metadata": {}}]
+        # Retrieve context
+        context = await self.retriever.ainvoke(query) or []
 
-        # Format the prompt first
+        # Format the prompt
         formatted_prompt = prompt.format(context=context, question=query)
 
         # Create the chain for streaming
-        chain = (model | StrOutputParser()).with_config({"tags": ["reporter_stream"]})
+        chain = model | StrOutputParser()
 
-        try:
-            async for chunk in chain.astream_events(
-                formatted_prompt,
-                version="v1",
-            ):
-                if (
-                    chunk["event"] == "on_chat_model_stream"
-                    and chunk.get("data", {}).get("chunk", {}).content
-                ):
-                    content = chunk["data"]["chunk"].content
-                    yield content
-        except Exception as e:
-            yield f"Error during streaming: {str(e)}"
+        async for chunk in chain.astream(formatted_prompt):
+            yield chunk
 
     def check_cases(self, case: str) -> str:
         prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])

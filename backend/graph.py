@@ -1,6 +1,5 @@
 import asyncio
 import os
-from enum import Enum
 from pprint import pprint
 from typing import Any, AsyncGenerator, Literal
 
@@ -76,30 +75,24 @@ class AgentClassroom:
         return workflow.compile(checkpointer=self.memory, interrupt_before=["human"])
 
     async def reporter_node(self, state: State) -> AsyncGenerator[dict[str, Any], None]:
+        print("reporter_node")
         query = state.query
-        accumulated_content = ""
-
         reporter = self.reporter
+
+        accumulated_content = ""
         async for token in reporter.generate_report_stream(query):
             accumulated_content += token
             state.reporter_content = accumulated_content
+            # print(state.model_dump())
+
             yield {
                 "query": query,
                 "current_role": "reporter",
-                "reporter_content": accumulated_content,  # Send only the new token
-                "stream": True,
+                "reporter_content": accumulated_content,
             }
 
-        state.reporter_content = accumulated_content
-        # Yield final state after streaming is complete
-        yield {
-            "query": query,
-            "current_role": "reporter",
-            "reporter_content": accumulated_content,
-            "stream": False,  # Indicate this is the final state
-        }
-
     def critic_node(self, state: State) -> dict[str, Any]:
+        print("critic_node")
         query = state.query
         report_text = state.reporter_content
         critic_content = state.critic_content
@@ -166,7 +159,7 @@ class AgentClassroom:
             "thead_id": state.thead_id,
         }
 
-    def show_image(self):
+    def show_image(self) -> None:
         img_data = Image(self.graph.get_graph().draw_mermaid_png())
         file_path = "compiled_graph.png"
         with open(file_path, "wb") as f:
@@ -184,18 +177,11 @@ async def main():
 
     # agent.show_image()
     init_state = State(query="トランプの経済政策")
-    config = {"configurable": {"thread_id": "1"}}
+    config = {"configurable": {"thread_id": "2"}}
 
-    async for event in agent.graph.astream_events(init_state, config, version="v1"):
-        chunk = event.get("data", {}).get("chunk", {})
-        try:
-            state = State(**chunk)
-            print("critic_content")
-            pprint(state.critic_content)
-            print("critic_content_feedback")
-            pprint(state.critic_content_feedback)
-        except Exception as e:
-            continue
+    async for chunk in agent.graph.astream(init_state, config, stream_mode=True):
+        print("==================================================")
+        print(chunk)
 
 
 if __name__ == "__main__":
