@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Grid, Alert } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -28,9 +28,33 @@ interface State {
 
 const DiscussionContainer: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [state, setState] = useState<State>({ query: '' });
-  const [currentStep, setCurrentStep] = useState<'initial' | 'report' | 'points' | 'final'>('initial');
+  const [state, setState] = useState<State>(() => {
+    // Initialize state from session storage if available
+    if (typeof window !== 'undefined') {
+      const savedState = sessionStorage.getItem('discussionState');
+      return savedState ? JSON.parse(savedState) : { query: '' };
+    }
+    return { query: '' };
+  });
+  const [currentStep, setCurrentStep] = useState<'initial' | 'report' | 'points' | 'final'>(() => {
+    // Initialize currentStep from session storage if available
+    if (typeof window !== 'undefined') {
+      const savedStep = sessionStorage.getItem('currentStep');
+      return (savedStep as 'initial' | 'report' | 'points' | 'final') || 'initial';
+    }
+    return 'initial';
+  });
   const [error, setError] = useState<string | null>(null);
+
+  // Save state to session storage whenever it changes
+  useEffect(() => {
+    sessionStorage.setItem('discussionState', JSON.stringify(state));
+  }, [state]);
+
+  // Save currentStep to session storage whenever it changes
+  useEffect(() => {
+    sessionStorage.setItem('currentStep', currentStep);
+  }, [currentStep]);
 
   const processStream = async (response: Response) => {
     const reader = response.body?.getReader();
@@ -132,6 +156,15 @@ const DiscussionContainer: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Add cleanup function to clear session storage when component unmounts
+  useEffect(() => {
+    return () => {
+      // Optionally clear session storage on unmount if needed
+      // sessionStorage.removeItem('discussionState');
+      // sessionStorage.removeItem('currentStep');
+    };
+  }, []);
 
   return (
     <Grid container spacing={3}>
