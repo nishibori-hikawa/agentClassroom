@@ -15,7 +15,7 @@ def create_news_retriever() -> TavilySearchAPIRetriever:
     """Create a retriever specifically for news sources"""
     return TavilySearchAPIRetriever(
         k=3,
-        search_depth="basic",
+        search_depth="advanced",
         topic="news",
         include_raw_content=True,
     )
@@ -25,7 +25,7 @@ def create_general_retriever() -> TavilySearchAPIRetriever:
     """Create a general-purpose retriever without domain restrictions"""
     return TavilySearchAPIRetriever(
         k=3,
-        search_depth="basic",
+        search_depth="advanced",
         include_raw_content=True,
     )
 

@@ -83,6 +83,40 @@ class ReporterAgent:
         chain: Runnable = prompt | model | StrOutputParser()
         return chain.invoke({"context": content, "case": case})
 
+    async def check_cases_stream(self, case: str) -> AsyncGenerator[str, None]:
+        prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])
+        model = self.llm
+
+        # First get the context
+        try:
+            content = await self.retriever.ainvoke(case)
+            if not content:
+                content = [
+                    {"page_content": "No relevant information found for this case.", "metadata": {}}
+                ]
+        except Exception as e:
+            content = [{"page_content": f"Error retrieving information: {str(e)}", "metadata": {}}]
+
+        # Format the prompt first
+        formatted_prompt = prompt.format(context=content, case=case)
+
+        # Create the chain for streaming
+        chain = (model | StrOutputParser()).with_config({"tags": ["check_cases_stream"]})
+
+        try:
+            async for chunk in chain.astream_events(
+                formatted_prompt,
+                version="v1",
+            ):
+                if (
+                    chunk["event"] == "on_chat_model_stream"
+                    and chunk.get("data", {}).get("chunk", {}).content
+                ):
+                    content = chunk["data"]["chunk"].content
+                    yield content
+        except Exception as e:
+            yield f"Error during streaming: {str(e)}"
+
 
 class CriticPoint(BaseModel):
     title: str

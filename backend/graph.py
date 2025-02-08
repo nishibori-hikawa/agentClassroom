@@ -113,23 +113,58 @@ class AgentClassroom:
             "thead_id": state.thead_id,
         }
 
-    def check_node(self, state: State) -> dict[str, Any]:
+    # def check_node(self, state: State) -> dict[str, Any]:
+    #     query = state.query
+
+    #     critic_case = state.critic_content.points[state.human_selection.point_num].cases[
+    #         state.human_selection.case_num
+    #     ]
+    #     repoter = self.reporter
+    #     generated_text = repoter.check_cases_stream(critic_case)
+
+    #     return {
+    #         "query": query,
+    #         "current_role": "human",
+    #         "reporter_content": state.reporter_content,
+    #         "critic_content": state.critic_content,
+    #         "human_selection": state.human_selection,
+    #         "check_content": generated_text,
+    #         "thead_id": state.thead_id,
+    #     }
+
+    async def check_node(self, state: State) -> AsyncGenerator[dict[str, Any], None]:
         query = state.query
+        accumulated_content = ""
 
         critic_case = state.critic_content.points[state.human_selection.point_num].cases[
             state.human_selection.case_num
         ]
-        repoter = self.reporter
-        generated_text = repoter.check_cases(critic_case)
+        reporter = self.reporter
+        async for token in reporter.check_cases_stream(critic_case):
+            accumulated_content += token
+            state.check_content = accumulated_content
+            yield {
+                "query": query,
+                "current_role": "check",
+                "reporter_content": state.reporter_content,
+                "critic_content": state.critic_content,
+                "human_selection": state.human_selection,
+                "check_content": accumulated_content,
+                "thead_id": state.thead_id,
+                "stream": True,
+            }
 
-        return {
+        state.check_content = accumulated_content
+        # Yield final state after streaming is complete
+        yield {
             "query": query,
-            "current_role": "human",
+            "current_role": "check",
             "reporter_content": state.reporter_content,
             "critic_content": state.critic_content,
             "human_selection": state.human_selection,
-            "check_content": generated_text,
+            "check_content": accumulated_content,
             "thead_id": state.thead_id,
+            "stream": False,  # Indicate this is the final state
         }
 
     def show_image(self):
