@@ -230,23 +230,10 @@ const DiscussionContainer: React.FC = () => {
           <Card sx={{ mb: 2, backgroundColor: '#fff' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                選択された視点の詳細分析
-              </Typography>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.check_content}</ReactMarkdown>
-            </CardContent>
-          </Card>
-        </Grid>
-      )}
-
-      {currentStep === 'final' && state.check_content && (
-        <Grid item xs={12}>
-          <Card sx={{ mb: 2, backgroundColor: '#f5f5f5' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
                 Reporter
               </Typography>
-              <Typography variant="body2" color="textSecondary" gutterBottom>
-                選択された視点に基づく分析結果
+              <Typography variant="body2" gutterBottom>
+                選択された視点の詳細分析
               </Typography>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.check_content}</ReactMarkdown>
             </CardContent>
