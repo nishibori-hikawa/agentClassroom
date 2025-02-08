@@ -42,7 +42,7 @@ class AgentClassroom:
     def __init__(self, llm: BaseChatModel, retriever: BaseRetriever) -> None:
         self.llm = llm
         self.retriever = retriever
-        self.reporter = ReporterAgent(retriever, llm)
+        self.reporter = ReporterAgent(llm)
         self.critic = CriticAgent(llm)
         self.memory = MemorySaver()
         self.graph = self._create_graph()
