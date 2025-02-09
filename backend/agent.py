@@ -11,6 +11,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 from templates import (
     CHECK_CASES_TEMPLATE,
