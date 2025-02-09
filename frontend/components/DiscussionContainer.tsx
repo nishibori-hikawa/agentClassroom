@@ -75,33 +75,194 @@ const DiscussionContainer: React.FC = () => {
     setInvestigatedPoints(new Set());
   };
 
+  const updateReportPoints = (
+    points: Point[],
+    level: number,
+    parentId: string,
+    targetPointId: string,
+    detailedReportData: ReportContent,
+    selectedPoint: Point
+  ): Point[] => {
+    console.group('updateReportPoints Debug');
+    console.log('Input Parameters:', {
+      level,
+      parentId,
+      targetPointId,
+      detailedReportData,
+      selectedPoint
+    });
+
+    let result;
+    // level === 0 の場合はトップレベルのポイントを直接更新
+    if (level === 0) {
+      result = points.map(point => {
+        if (point.id === targetPointId) {
+          return { ...point, detailedReport: detailedReportData };
+        }
+        return point;
+      });
+    } else {
+      // level > 0 の場合は、まず対象の親ノードを探す
+      result = points.map(point => {
+        console.log('Processing point:', { pointId: point.id, parentId, targetPointId });
+        
+        if (point.id === parentId) {
+          console.log('Found parent point:', { point });
+          // 対象親ノードの detailedReport がなければ初期化
+          const currentDetailedReport = point.detailedReport || {
+            id: `${level}_${parentId}`,
+            topic: point.title,
+            points: [] as Point[]
+          };
+          console.log('Current detailed report:', { currentDetailedReport });
+
+          // 対象の子ノードが存在すれば更新、なければ追加
+          const updatedChildren = currentDetailedReport.points.map(child => {
+            if (child.id === targetPointId) {
+              console.log('Updating existing child point:', { childId: child.id });
+              return { ...child, detailedReport: detailedReportData };
+            }
+            return child;
+          });
+
+          if (!currentDetailedReport.points.some(child => child.id === targetPointId)) {
+            console.log('Adding new child point:', { targetPointId });
+            updatedChildren.push({ ...selectedPoint, detailedReport: detailedReportData });
+          }
+
+          const updatedPoint = {
+            ...point,
+            detailedReport: { ...currentDetailedReport, points: updatedChildren }
+          };
+          console.log('Updated parent point:', { updatedPoint });
+          return updatedPoint;
+        } else if (point.detailedReport?.points) {
+          console.log('Recursing into nested points:', { 
+            pointId: point.id, 
+            hasDetailedReport: !!point.detailedReport,
+            pointsCount: point.detailedReport?.points?.length 
+          });
+          return {
+            ...point,
+            detailedReport: {
+              ...point.detailedReport,
+              points: updateReportPoints(
+                point.detailedReport.points,
+                level,
+                parentId,
+                targetPointId,
+                detailedReportData,
+                selectedPoint
+              )
+            }
+          };
+        }
+        return point;
+      });
+    }
+    console.log('Result points:', result);
+    console.groupEnd();
+    return result;
+  };
+
   const handlePointSelect = async (fullPointId: string) => {
     if (!report) return;
 
-    // レベル、親ポイントID、ポイントIDを分離
-    const [level, parentPointId, pointId] = fullPointId.split('_');
+    console.group('handlePointSelect Debug');
+    console.log('Initial state:', {
+      fullPointId,
+      currentReport: report,
+      currentState: state
+    });
+
+    // fullPointId の形式は `${level}_${parentPointId}_${pointId}` なので分解する
+    const [levelStr, parentPointId, pointId] = fullPointId.split('_');
+    const level = parseInt(levelStr, 10);
+
+    console.log('Parsed point info:', {
+      level,
+      parentPointId,
+      pointId
+    });
 
     // 既に調査済みの場合は何もしない
-    if (investigatedPoints.has(fullPointId)) return;
+    if (investigatedPoints.has(fullPointId)) {
+      console.log('Point already investigated:', fullPointId);
+      console.groupEnd();
+      return;
+    }
+
+    // 対象のポイントを report 内から検索する（既存の処理）
+    const findSelectedPoint = (
+      points: Point[],
+      targetId: string,
+      targetLevel: number,
+      currentLevel: number = 0,
+      targetParentId?: string
+    ): Point | null => {
+      if (targetLevel === 0) {
+        return points.find(p => p.id === targetId) || null;
+      }
+      if (targetLevel === 1) {
+        const parentPoint = points.find(p => p.id === targetParentId);
+        if (!parentPoint) return null;
+        return parentPoint.detailedReport?.points.find(p => p.id === targetId) || null;
+      }
+      for (const point of points) {
+        if (point.detailedReport?.points) {
+          const found = findSelectedPoint(
+            point.detailedReport.points,
+            targetId,
+            targetLevel - 1,
+            currentLevel + 1,
+            targetParentId
+          );
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const selectedPoint = findSelectedPoint(report.points, pointId, level, 0, parentPointId);
+    if (!selectedPoint) {
+      console.error('Selected point not found:', { pointId, level, parentPointId });
+      return;
+    }
+
+    console.group('DiscussionContainer Point Selection');
+    console.log('Received Point Selection:', {
+      fullPointId,
+      level,
+      parentPointId,
+      pointId,
+      currentReport: report,
+      currentState: state,
+      selectedPoint
+    });
+    console.groupEnd();
 
     setLoadingPoints(prev => new Set(prev).add(fullPointId));
     try {
+      const requestData = {
+        state: {
+          query: selectedPoint.title,
+          current_role: state.current_role,
+          reporter_content: selectedPoint.content,
+          report_id: state.report_id
+        },
+        point_selection: {
+          report_id: state.report_id,
+          point_id: pointId
+        },
+        thread_id: 1
+      };
+
+      console.log('Backend Request:', requestData);
+
       const response = await fetch('http://localhost:8000/explore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          state: {
-            query: state.query,
-            current_role: state.current_role,
-            reporter_content: state.reporter_content,
-            report_id: state.report_id
-          },
-          point_selection: {
-            report_id: state.report_id,
-            point_id: pointId
-          },
-          thread_id: 1
-        }),
+        body: JSON.stringify(requestData),
       });
 
       if (!response.ok) {
@@ -109,62 +270,73 @@ const DiscussionContainer: React.FC = () => {
       }
 
       const data = await response.json();
+      console.log('Backend Response:', data);
+
       setState(prev => ({
         ...prev,
         ...data
       }));
 
       if (data.explored_content) {
+        // バックエンドから返された report_id を使用
+        const newReportId = data.report_id || `${level}_${parentPointId}_${pointId}`;
+        console.log('New report ID:', {
+          fromBackend: data.report_id,
+          generated: `${level}_${parentPointId}_${pointId}`,
+          final: newReportId
+        });
+        
         const detailedReportData = parseReportContent(
           data.explored_content,
-          `${data.report_id}_${pointId}`,
-          report.points.find(p => p.id === pointId)?.title || '詳細レポート'
+          newReportId,
+          selectedPoint.title
         );
+        console.log('Parsed detailed report:', detailedReportData);
 
-        // レポート構造を更新
+        // ここで再帰的更新を実施
         setReport(prev => {
           if (!prev) return null;
+          console.log('Updating report:', {
+            previousReport: prev,
+            newReportId,
+            level,
+            parentPointId,
+            pointId
+          });
 
-          // 親ポイントIDがrootの場合は最上位レベルのポイント
-          if (parentPointId === 'root') {
-            return {
-              ...prev,
-              points: prev.points.map(point => {
-                if (point.id === pointId) {
-                  return {
-                    ...point,
-                    detailedReport: detailedReportData
-                  };
-                }
-                return point;
-              })
-            };
-          }
+          const updatedPoints = updateReportPoints(
+            prev.points,
+            level,
+            parentPointId,
+            pointId,
+            detailedReportData,
+            selectedPoint
+          );
 
-          // 親ポイントIDが指定されている場合は、そのポイント配下の詳細レポートを更新
-          return {
-            ...prev,
-            points: prev.points.map(point => {
-              if (point.id === parentPointId && point.detailedReport) {
-                return {
-                  ...point,
-                  detailedReport: {
-                    ...point.detailedReport,
-                    points: point.detailedReport.points.map(subPoint => {
-                      if (subPoint.id === pointId) {
-                        return {
-                          ...subPoint,
-                          detailedReport: detailedReportData
-                        };
-                      }
-                      return subPoint;
-                    })
-                  }
-                };
-              }
-              return point;
-            })
+          const updatedReport = { 
+            ...prev, 
+            points: updatedPoints, 
+            id: newReportId
           };
+
+          console.log('Final report update:', {
+            previousId: prev.id,
+            newId: newReportId,
+            updatedReport
+          });
+          return updatedReport;
+        });
+
+        setState(prev => {
+          const newState = {
+            ...prev,
+            report_id: newReportId
+          };
+          console.log('State update:', {
+            previousState: prev,
+            newState
+          });
+          return newState;
         });
 
         setInvestigatedPoints(prev => new Set(prev).add(fullPointId));
@@ -180,7 +352,9 @@ const DiscussionContainer: React.FC = () => {
         return newSet;
       });
     }
+    console.groupEnd();
   };
+
 
   const parseReportContent = (text: string, reportId: string, topic: string): ReportContent => {
     const lines = text.split('\n');
