@@ -26,6 +26,7 @@ class Source(BaseModel):
 
 class ReporterPoint(BaseModel):
     id: str
+    title: str
     content: str
     source: Source
 
@@ -127,6 +128,47 @@ class ReporterAgent:
         except Exception as e:
             yield f"Error during streaming: {str(e)}"
 
+    def parse_report_output(self, text: str) -> ReportContent:
+        """Parse the reporter's markdown output into a structured format."""
+        lines = text.strip().split("\n")
+        points = []
+        current_point = None
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith("1.") or line.startswith("2.") or line.startswith("3."):
+                # Extract title from the bold markdown format
+                title = line.split("**")[1].strip("*[] ")
+                current_point = {
+                    "id": f"point_{len(points) + 1}",
+                    "title": title,
+                    "content": "",
+                    "source": None,
+                }
+            elif current_point and "[出典:" in line:
+                # Extract source information
+                source_parts = line.strip("[]").split("](")
+                name = source_parts[0].replace("出典:", "").strip()
+                url = source_parts[1].strip(")")
+                current_point["source"] = Source(name=name, url=url)
+                # Add the completed point to points list
+                points.append(
+                    ReporterPoint(
+                        id=current_point["id"],
+                        title=current_point["title"],
+                        content=current_point["content"].strip(),
+                        source=current_point["source"],
+                    )
+                )
+            elif current_point:
+                # Accumulate content lines
+                current_point["content"] += line + " "
+
+        return ReportContent(topic="", points=points)
+
 
 class CriticPoint(BaseModel):
     title: str
@@ -157,6 +199,7 @@ class CriticAgent:
 
 if __name__ == "__main__":
     import asyncio
+    from pprint import pprint
 
     load_dotenv()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -165,10 +208,28 @@ if __name__ == "__main__":
         reporter = ReporterAgent(llm)
         query = "ウクライナ戦争が国際秩序に与える影響について"
         print(f"\nTesting reporter with query: {query}\n")
+
+        # 出力を蓄積するための変数
+        accumulated_output = ""
         print("Streaming output:")
         async for chunk in reporter.generate_report_stream(query):
+            accumulated_output += chunk
             print(chunk, end="", flush=True)
-        print("\n\nTest completed.")
+
+        print("\n\nParsing the output:")
+        report_content = reporter.parse_report_output(accumulated_output)
+
+        # 構造化されたデータの内容を確認
+        print("\nParsed Report Content:")
+        for point in report_content.points:
+            print(f"\nPoint ID: {point.id}")
+            print(f"Title: {point.title}")
+            print(f"Content: {point.content}")
+            if point.source:
+                print(f"Source: {point.source.name} ({point.source.url})")
+            print("-" * 50)
+
+        print("\nTest completed.")
 
     # Run the test
     asyncio.run(test_reporter())
