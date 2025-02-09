@@ -48,34 +48,9 @@ interface Source {
 
 const DiscussionContainer: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [state, setState] = useState<State>(() => {
-    // Initialize state from session storage if available
-    if (typeof window !== 'undefined') {
-      const savedState = sessionStorage.getItem('discussionState');
-      return savedState ? JSON.parse(savedState) : { query: '' };
-    }
-    return { query: '' };
-  });
-  const [currentStep, setCurrentStep] = useState<'initial' | 'report' | 'points' | 'final'>(() => {
-    // Initialize currentStep from session storage if available
-    if (typeof window !== 'undefined') {
-      const savedStep = sessionStorage.getItem('currentStep');
-      return (savedStep as 'initial' | 'report' | 'points' | 'final') || 'initial';
-    }
-    return 'initial';
-  });
+  const [state, setState] = useState<State>({ query: '' });
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportContent | null>(null);
-
-  // Save state to session storage whenever it changes
-  useEffect(() => {
-    sessionStorage.setItem('discussionState', JSON.stringify(state));
-  }, [state]);
-
-  // Save currentStep to session storage whenever it changes
-  useEffect(() => {
-    sessionStorage.setItem('currentStep', currentStep);
-  }, [currentStep]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,8 +126,10 @@ const DiscussionContainer: React.FC = () => {
           first_call: false,
           state: {
             ...state,
+            reporter_content: state.reporter_content,
+            current_role: 'reporter',
             human_selection: {
-              point_num: parseInt(pointId) - 1,
+              point_num: parseInt(pointId),
               case_num: 0
             }
           },
@@ -215,8 +192,8 @@ const DiscussionContainer: React.FC = () => {
         if (currentPoint) {
           points.push(currentPoint);
         }
-        // タイトルの抽出を修正
-        const titleMatch = line.match(/\*\*\[(.*?)\]\*\*/);
+        // タイトルの抽出を修正 - **[タイトル]** から **タイトル** の形式に変更
+        const titleMatch = line.match(/\*\*(.*?)\*\*/);
         currentPoint = {
           id: (points.length + 1).toString(),
           title: titleMatch ? titleMatch[1].trim() : '',
@@ -244,15 +221,6 @@ const DiscussionContainer: React.FC = () => {
 
     return points;
   };
-
-  // Add cleanup function to clear session storage when component unmounts
-  useEffect(() => {
-    return () => {
-      // Optionally clear session storage on unmount if needed
-      // sessionStorage.removeItem('discussionState');
-      // sessionStorage.removeItem('currentStep');
-    };
-  }, []);
 
   return (
     <Box sx={{ maxWidth: 'lg', mx: 'auto', p: 3 }}>
