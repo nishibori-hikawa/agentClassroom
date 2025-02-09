@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Grid, Alert } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ReportPoints } from './ReportPoints';
 
 interface CriticPoint {
   title: string;
@@ -26,6 +27,25 @@ interface State {
   thread_id?: string;
 }
 
+interface ReportContent {
+  id: string;
+  topic: string;
+  points: {
+    id: string;
+    title: string;
+    content: string;
+    source: {
+      name: string;
+      url: string;
+    };
+  }[];
+}
+
+interface Source {
+  name: string;
+  url: string;
+}
+
 const DiscussionContainer: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [state, setState] = useState<State>(() => {
@@ -45,6 +65,7 @@ const DiscussionContainer: React.FC = () => {
     return 'initial';
   });
   const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<ReportContent | null>(null);
 
   // Save state to session storage whenever it changes
   useEffect(() => {
@@ -56,79 +77,74 @@ const DiscussionContainer: React.FC = () => {
     sessionStorage.setItem('currentStep', currentStep);
   }, [currentStep]);
 
-  const processStream = async (response: Response) => {
-    const reader = response.body?.getReader();
-    if (!reader) return;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const text = new TextDecoder().decode(value);
-      const lines = text.split('\n').filter(line => line.trim());
-      
-      for (const line of lines) {
-        try {
-          const newState = JSON.parse(line);
-          setState(prevState => ({
-            ...prevState,
-            ...newState
-          }));
-          
-          if (newState.current_role === 'reporter') {
-            setCurrentStep('report');
-          } else if (newState.current_role === 'critic') {
-            setCurrentStep('points');
-          } else if (newState.current_role === 'check') {
-            setCurrentStep('final');
-          }
-        } catch (e) {
-          console.error('Error parsing stream data:', e);
-        }
-      }
-    }
-  };
-
-  const handleTopicSubmit = async (topic: string) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
-    setError(null);
     try {
-      if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
-        throw new Error('バックエンドURLが設定されていません。環境変数を確認してください。');
-      }
-      
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/stream`, {
+      const response = await fetch('http://localhost:8000/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           first_call: true,
-          state: { query: topic },
+          state: { query: state.query },
           thread_id: 1
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`APIエラー: ${response.status} ${response.statusText}`);
+        throw new Error(`API error: ${response.status}`);
       }
 
-      await processStream(response);
+      const reader = response.body?.getReader();
+      if (!reader) return;
+
+      let accumulated_output = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const text = new TextDecoder().decode(value);
+        const lines = text.split('\n\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            if (data.reporter_content) {
+              accumulated_output = data.reporter_content;
+              setState(prev => ({
+                ...prev,
+                reporter_content: accumulated_output
+              }));
+            }
+          } catch (e) {
+            console.error('Error parsing stream data:', e);
+          }
+        }
+      }
+
+      // レポート内容をパースしてReportContentに変換
+      if (accumulated_output) {
+        const reportData = {
+          id: new Date().getTime().toString(),
+          topic: state.query,
+          points: parseReportContent(accumulated_output)
+        };
+        setReport(reportData);
+      }
+
     } catch (error) {
-      console.error('Error starting discussion:', error);
+      console.error('Error:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCaseSelect = async (pointNum: number, caseNum: number) => {
+  const handlePointSelect = async (pointId: string) => {
+    if (!report) return;
     setLoading(true);
-    setError(null);
     try {
-      if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
-        throw new Error('バックエンドURLが設定されていません。環境変数を確認してください。');
-      }
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/stream`, {
+      const response = await fetch('http://localhost:8000/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -136,8 +152,8 @@ const DiscussionContainer: React.FC = () => {
           state: {
             ...state,
             human_selection: {
-              point_num: pointNum,
-              case_num: caseNum
+              point_num: parseInt(pointId) - 1,
+              case_num: 0
             }
           },
           thread_id: 1
@@ -145,16 +161,88 @@ const DiscussionContainer: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`APIエラー: ${response.status} ${response.statusText}`);
+        throw new Error(`API error: ${response.status}`);
       }
 
-      await processStream(response);
+      // ストリームの処理
+      const reader = response.body?.getReader();
+      if (!reader) return;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const text = new TextDecoder().decode(value);
+        const lines = text.split('\n\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            setState(prev => ({
+              ...prev,
+              ...data
+            }));
+          } catch (e) {
+            console.error('Error parsing stream data:', e);
+          }
+        }
+      }
+
     } catch (error) {
-      console.error('Error selecting case:', error);
+      console.error('Error:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
       setLoading(false);
     }
+  };
+
+  // レポート内容をパースする関数
+  const parseReportContent = (text: string): any[] => {
+    const lines = text.split('\n');
+    const points = [];
+    let currentPoint: {
+      id: string;
+      title: string;
+      content: string;
+      source: Source | null;
+    } | null = null;
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      if (line.match(/^\d+\.\s+\*\*/)) {
+        // 前のポイントがあれば追加
+        if (currentPoint) {
+          points.push(currentPoint);
+        }
+        // タイトルの抽出を修正
+        const titleMatch = line.match(/\*\*\[(.*?)\]\*\*/);
+        currentPoint = {
+          id: (points.length + 1).toString(),
+          title: titleMatch ? titleMatch[1].trim() : '',
+          content: '',
+          source: null
+        };
+      } else if (currentPoint && line.includes('[出典:')) {
+        const sourceMatch = line.match(/\[出典:\s*(.*?)\]\((.*?)\)/);
+        if (sourceMatch) {
+          currentPoint.source = {
+            name: sourceMatch[1].trim(),
+            url: sourceMatch[2].trim()
+          };
+        }
+      } else if (currentPoint && !line.includes('[出典:')) {
+        // 出典行以外の場合はコンテンツとして追加
+        currentPoint.content += line.trim() + ' ';
+      }
+    }
+
+    // 最後のポイントを追加
+    if (currentPoint) {
+      points.push(currentPoint);
+    }
+
+    return points;
   };
 
   // Add cleanup function to clear session storage when component unmounts
@@ -167,120 +255,52 @@ const DiscussionContainer: React.FC = () => {
   }, []);
 
   return (
-    <Grid container spacing={3}>
+    <Box sx={{ maxWidth: 'lg', mx: 'auto', p: 3 }}>
+      <Card sx={{ mb: 4 }}>
+        <CardContent>
+          <form onSubmit={handleSubmit}>
+            <TextField
+              fullWidth
+              value={state.query}
+              onChange={(e) => setState({ ...state, query: e.target.value })}
+              placeholder="質問を入力してください"
+              variant="outlined"
+              sx={{ mb: 2 }}
+            />
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={loading}
+              fullWidth
+            >
+              {loading ? (
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
+                  生成中...
+                </Box>
+              ) : (
+                '送信'
+              )}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {report && (
+        <Box>
+          <Typography variant="h5" sx={{ mb: 3 }}>
+            {report.topic}
+          </Typography>
+          <ReportPoints points={report.points} onPointSelect={handlePointSelect} />
+        </Box>
+      )}
+
       {error && (
-        <Grid item xs={12}>
-          <Alert severity="error" onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Grid>
+        <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
       )}
-
-      {/* Reporter Card */}
-      <Grid item xs={12}>
-        <Card sx={{ mb: 2, backgroundColor: currentStep === 'initial' ? '#f5f5f5' : 'white' }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Reporter
-            </Typography>
-            {currentStep === 'initial' ? (
-              <Box>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  トピックを入力して、調査を開始します
-                </Typography>
-                <TextField
-                  fullWidth
-                  value={state.query}
-                  onChange={(e) => setState({ ...state, query: e.target.value })}
-                  placeholder="議論したいトピックを入力"
-                  sx={{ mb: 2 }}
-                />
-                <Button
-                  variant="contained"
-                  onClick={() => handleTopicSubmit(state.query)}
-                  disabled={!state.query || loading}
-                >
-                  調査を開始
-                </Button>
-              </Box>
-            ) : (
-              state.reporter_content && (
-                <Box sx={{ mt: 2 }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.reporter_content}</ReactMarkdown>
-                </Box>
-              )
-            )}
-          </CardContent>
-        </Card>
-      </Grid>
-
-      {/* Critic Card */}
-      {state.critic_content?.points && (
-        <Grid item xs={12}>
-          <Card sx={{ mb: 2, backgroundColor: '#f5f5f5' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Critic
-              </Typography>
-              <Typography variant="body2" color="textSecondary" gutterBottom>
-                以下の論点から、検討したい視点を選択してください
-              </Typography>
-              {state.critic_content.points.map((point, pointIndex) => (
-                <Box key={pointIndex} sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    {point.title}
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    {point.cases.map((caseText, caseIndex) => (
-                      <Button
-                        key={caseIndex}
-                        variant="outlined"
-                        onClick={() => handleCaseSelect(pointIndex, caseIndex)}
-                        disabled={loading}
-                        sx={{ 
-                          flex: '1 1 auto',
-                          backgroundColor: 
-                            state.human_selection?.point_num === pointIndex && 
-                            state.human_selection?.case_num === caseIndex 
-                              ? '#e3f2fd' 
-                              : 'inherit'
-                        }}
-                      >
-                        {caseText}
-                      </Button>
-                    ))}
-                  </Box>
-                </Box>
-              ))}
-            </CardContent>
-          </Card>
-        </Grid>
-      )}
-
-      {/* Case Report Card */}
-      {state.check_content && (
-        <Grid item xs={12}>
-          <Card sx={{ mb: 2, backgroundColor: '#fff' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Reporter
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                選択された視点の詳細分析
-              </Typography>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.check_content}</ReactMarkdown>
-            </CardContent>
-          </Card>
-        </Grid>
-      )}
-
-      {/* Loading Indicator */}
-      {loading && (
-        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-          <CircularProgress />
-        </Grid>
-      )}
-    </Grid>
+    </Box>
   );
 };
 
