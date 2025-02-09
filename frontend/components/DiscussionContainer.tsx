@@ -270,9 +270,6 @@ const DiscussionContainer: React.FC = () => {
 
       {report && (
         <Box>
-          <Typography variant="h5" gutterBottom>
-            {report.topic}
-          </Typography>
           <ReportPoints
             points={report.points}
             onPointSelect={handlePointSelect}
@@ -281,6 +278,9 @@ const DiscussionContainer: React.FC = () => {
             loading={loading}
             loadingPoints={loadingPoints}
             level={0}
+            topic={report.topic}
+            pointPath={[]}
+            parentTitle={undefined}
           />
         </Box>
       )}

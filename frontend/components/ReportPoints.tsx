@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Card, CardContent, Typography, Button, Grid, CircularProgress } from '@mui/material';
+import { Box, Card, CardContent, Typography, Button, Grid, CircularProgress, Breadcrumbs } from '@mui/material';
 import { Point } from '../types/report';
 
 interface ReportPointsProps {
@@ -11,6 +11,9 @@ interface ReportPointsProps {
   loadingPoints: Set<string>;
   level?: number;
   parentPointId?: string;
+  pointPath?: string[];
+  topic?: string;
+  parentTitle?: string;
 }
 
 export const ReportPoints: React.FC<ReportPointsProps> = ({
@@ -21,7 +24,10 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
   loading = false,
   loadingPoints,
   level = 0,
-  parentPointId = 'root'
+  parentPointId = 'root',
+  pointPath = [],
+  topic,
+  parentTitle
 }) => {
   // 現在のレベルとparentPointIdのポイントIDのみをチェックするヘルパー関数
   const isInvestigated = (pointId: string) => {
@@ -54,8 +60,29 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
     onPointSelect(fullId);
   };
 
+  const renderPointPath = () => {
+    if (level === 0) return null;
+    return (
+      <Breadcrumbs aria-label="point path" sx={{ ml: 2 }}>
+        {pointPath.map((id, index) => (
+          <Typography key={index} color="text.secondary">
+            {id}
+          </Typography>
+        ))}
+      </Breadcrumbs>
+    );
+  };
+
   return (
     <Box>
+      {(level === 0 ? topic : parentTitle) && (
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h5">
+            {level === 0 ? topic : parentTitle}
+          </Typography>
+          {renderPointPath()}
+        </Box>
+      )}
       <Grid container spacing={2}>
         <Grid item xs={12}>
           {points.map((point) => (
@@ -105,6 +132,9 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
                       loadingPoints={loadingPoints}
                       level={level + 1}
                       parentPointId={point.id}
+                      pointPath={[...pointPath, point.id]}
+                      topic={point.detailedReport.topic}
+                      parentTitle={point.title}
                     />
                   </Box>
                 )}
