@@ -1,5 +1,6 @@
-import React from 'react';
-import { Box, Card, CardContent, Typography, Button, Grid, CircularProgress, Breadcrumbs } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, Card, CardContent, Typography, Button, Grid, CircularProgress, Breadcrumbs, Pagination } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { Point } from '../types/report';
 
 interface ReportPointsProps {
@@ -14,6 +15,7 @@ interface ReportPointsProps {
   pointPath?: string[];
   topic?: string;
   parentTitle?: string;
+  onBack?: () => void;
 }
 
 export const ReportPoints: React.FC<ReportPointsProps> = ({
@@ -27,8 +29,17 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
   parentPointId = 'root',
   pointPath = [],
   topic,
-  parentTitle
+  parentTitle,
+  onBack
 }) => {
+  const POINTS_PER_PAGE = 3;
+  const [page, setPage] = useState(1);
+  const [expandedPointId, setExpandedPointId] = useState<string | null>(null);
+
+  // ページネーション用のポイント配列を取得
+  const paginatedPoints = points.slice((page - 1) * POINTS_PER_PAGE, page * POINTS_PER_PAGE);
+  const totalPages = Math.ceil(points.length / POINTS_PER_PAGE);
+
   // 現在のレベルとparentPointIdのポイントIDのみをチェックするヘルパー関数
   const isInvestigated = (pointId: string) => {
     const fullId = `${level}_${parentPointId}_${pointId}`;
@@ -50,14 +61,31 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
       );
     }
     if (isInvestigated(point.id)) {
-      return '詳細を見る';
+      return expandedPointId === point.id ? '戻る' : '詳細を見る';
     }
     return '詳細を調査';
   };
 
   const handlePointSelect = (pointId: string) => {
     const fullId = `${level}_${parentPointId}_${pointId}`;
-    onPointSelect(fullId);
+    if (isInvestigated(pointId)) {
+      setExpandedPointId(expandedPointId === pointId ? null : pointId);
+    } else {
+      onPointSelect(fullId);
+    }
+  };
+
+  const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
+    setPage(value);
+    setExpandedPointId(null);
+  };
+
+  const handleBack = () => {
+    if (expandedPointId) {
+      setExpandedPointId(null);
+    } else if (onBack) {
+      onBack();
+    }
   };
 
   const renderPointPath = () => {
@@ -73,19 +101,61 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
     );
   };
 
+  // 展開されたポイントの詳細レポートを表示
+  const renderExpandedPoint = () => {
+    if (!expandedPointId) return null;
+
+    const expandedPoint = points.find(p => p.id === expandedPointId);
+    if (!expandedPoint?.detailedReport) return null;
+
+    return (
+      <ReportPoints
+        points={expandedPoint.detailedReport.points}
+        onPointSelect={onPointSelect}
+        selectedPointId={selectedPointId}
+        investigatedPoints={investigatedPoints}
+        loading={loading}
+        loadingPoints={loadingPoints}
+        level={level + 1}
+        parentPointId={expandedPoint.id}
+        pointPath={[...pointPath, expandedPoint.id]}
+        topic={expandedPoint.detailedReport.topic}
+        parentTitle={expandedPoint.title}
+        onBack={handleBack}
+      />
+    );
+  };
+
+  const renderHeader = () => {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        {level > 0 && (
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={handleBack}
+            sx={{ mr: 2 }}
+          >
+            戻る
+          </Button>
+        )}
+        <Typography variant="h5">
+          {level === 0 ? topic : parentTitle}
+        </Typography>
+        {renderPointPath()}
+      </Box>
+    );
+  };
+
+  if (expandedPointId) {
+    return renderExpandedPoint();
+  }
+
   return (
     <Box>
-      {(level === 0 ? topic : parentTitle) && (
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5">
-            {level === 0 ? topic : parentTitle}
-          </Typography>
-          {renderPointPath()}
-        </Box>
-      )}
+      {(level === 0 ? topic : parentTitle) && renderHeader()}
       <Grid container spacing={2}>
         <Grid item xs={12}>
-          {points.map((point) => (
+          {paginatedPoints.map((point) => (
             <Card
               key={point.id}
               sx={{
@@ -121,28 +191,24 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
                     {renderButtonContent(point)}
                   </Button>
                 </Box>
-                {isInvestigated(point.id) && point.detailedReport && (
-                  <Box sx={{ mt: 2, ml: 2 }}>
-                    <ReportPoints
-                      points={point.detailedReport.points}
-                      onPointSelect={onPointSelect}
-                      selectedPointId={selectedPointId}
-                      investigatedPoints={investigatedPoints}
-                      loading={loading}
-                      loadingPoints={loadingPoints}
-                      level={level + 1}
-                      parentPointId={point.id}
-                      pointPath={[...pointPath, point.id]}
-                      topic={point.detailedReport.topic}
-                      parentTitle={point.title}
-                    />
-                  </Box>
-                )}
               </CardContent>
             </Card>
           ))}
         </Grid>
       </Grid>
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2, mb: 2 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handlePageChange}
+            color="primary"
+            size="large"
+            showFirstButton
+            showLastButton
+          />
+        </Box>
+      )}
     </Box>
   );
 }; 
