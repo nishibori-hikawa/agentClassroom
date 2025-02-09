@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, List, TypedDict
+import json
 
 from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate
@@ -18,25 +19,33 @@ if TYPE_CHECKING:
     from langchain_core.runnables import Runnable
 
 
+class Source(BaseModel):
+    name: str
+    url: str
+
+
+class ReporterPoint(BaseModel):
+    id: str
+    content: str
+    source: Source
+
+
+class ReportContent(BaseModel):
+    topic: str
+    points: list[ReporterPoint] = Field(default_factory=list)
+
+
 class ReporterAgent:
     def __init__(self, llm: BaseChatModel) -> None:
         self.llm = llm
         self.news_retriever = create_news_retriever()
         self.general_retriever = create_general_retriever()
 
-    def generate_report(self, query: str) -> str:
-        prompt = PromptTemplate(
-            template=GENERATE_REPORT_TEMPLATE, input_variables=["context", "question"]
-        )
-        model = self.llm
-
-        chain: Runnable = {"context": self.news_retriever} | prompt | model | StrOutputParser()
-
-        return chain.invoke(query)
-
     async def generate_report_stream(self, query: str) -> AsyncGenerator[str, None]:
+        # Create the prompt
         prompt = PromptTemplate(
-            template=GENERATE_REPORT_TEMPLATE, input_variables=["context", "question"]
+            template=GENERATE_REPORT_TEMPLATE,
+            input_variables=["context", "question"],
         )
         model = self.llm
 
@@ -65,6 +74,7 @@ class ReporterAgent:
                 ):
                     content = chunk["data"]["chunk"].content
                     yield content
+
         except Exception as e:
             yield f"Error during streaming: {str(e)}"
 
@@ -146,9 +156,19 @@ class CriticAgent:
 
 
 if __name__ == "__main__":
+    import asyncio
+
     load_dotenv()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    agent = CriticAgent(llm)
-    report_text = "国際機関の関与は、国際政治の安定と平和を促進するために重要である。なぜなら、国際機関は各国の間での紛争を解決し、国際的な課題に対応するための重要なツールであるからである。例えば、ソマリアは国際機関の関与を受けて、紛争を解決し、平和を促進している。"
-    print(agent.generate_critique(report_text))
+    async def test_reporter():
+        reporter = ReporterAgent(llm)
+        query = "ウクライナ戦争が国際秩序に与える影響について"
+        print(f"\nTesting reporter with query: {query}\n")
+        print("Streaming output:")
+        async for chunk in reporter.generate_report_stream(query):
+            print(chunk, end="", flush=True)
+        print("\n\nTest completed.")
+
+    # Run the test
+    asyncio.run(test_reporter())
