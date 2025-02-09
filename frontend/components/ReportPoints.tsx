@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Box, Card, CardContent, Typography, Button, Grid, CircularProgress, Breadcrumbs, Pagination } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
+import SearchIcon from '@mui/icons-material/Search';
 import { Point } from '../types/report';
 
 interface ReportPointsProps {
@@ -61,9 +63,28 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
       );
     }
     if (isInvestigated(point.id)) {
-      return expandedPointId === point.id ? '戻る' : '詳細を見る';
+      if (expandedPointId === point.id) {
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ArrowBackIcon />
+            戻る
+          </Box>
+        );
+      }
+      const detailedPoints = point.detailedReport?.points?.length || 0;
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <FormatListBulletedIcon />
+          調査済み {detailedPoints}件
+        </Box>
+      );
     }
-    return '詳細を調査';
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <SearchIcon />
+        詳細を調査
+      </Box>
+    );
   };
 
   const handlePointSelect = (pointId: string) => {
