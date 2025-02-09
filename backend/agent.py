@@ -70,42 +70,6 @@ class ReporterAgent:
 
         return PointSelection(report_id=report_id, point_id=point_id)
 
-    # async def generate_report_stream(self, query: str) -> AsyncGenerator[str, None]:
-    #     # Create the prompt
-    #     prompt = PromptTemplate(
-    #         template=GENERATE_REPORT_TEMPLATE,
-    #         input_variables=["context", "question"],
-    #     )
-    #     model = self.llm
-
-    #     # First get the context using news retriever
-    #     try:
-    #         context = await self.news_retriever.ainvoke(query)
-    #         if not context:
-    #             context = [{"page_content": "No relevant information found.", "metadata": {}}]
-    #     except Exception as e:
-    #         context = [{"page_content": "Error retrieving information.", "metadata": {}}]
-
-    #     # Format the prompt first
-    #     formatted_prompt = prompt.format(context=context, question=query)
-
-    #     # Create the chain for streaming
-    #     chain = (model | StrOutputParser()).with_config({"tags": ["reporter_stream"]})
-
-    #     try:
-    #         async for chunk in chain.astream_events(
-    #             formatted_prompt,
-    #             version="v1",
-    #         ):
-    #             if (
-    #                 chunk["event"] == "on_chat_model_stream"
-    #                 and chunk.get("data", {}).get("chunk", {}).content
-    #             ):
-    #                 content = chunk["data"]["chunk"].content
-    #                 yield content
-
-    #     except Exception as e:
-    #         yield f"Error during streaming: {str(e)}"
 
     def generate_report(self, query: str) -> str:
         """非ストリーミングバージョンのレポート生成メソッド"""
@@ -180,40 +144,6 @@ class ReporterAgent:
         chain: Runnable = prompt | model | StrOutputParser()
         return chain.invoke({"context": content, "case": case})
 
-    async def check_cases_stream(self, case: str) -> AsyncGenerator[str, None]:
-        prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])
-        model = self.llm
-
-        # First get the context
-        try:
-            content = await self.retriever.ainvoke(case)
-            if not content:
-                content = [
-                    {"page_content": "No relevant information found for this case.", "metadata": {}}
-                ]
-        except Exception as e:
-            content = [{"page_content": f"Error retrieving information: {str(e)}", "metadata": {}}]
-
-        # Format the prompt first
-        formatted_prompt = prompt.format(context=content, case=case)
-
-        # Create the chain for streaming
-        chain = (model | StrOutputParser()).with_config({"tags": ["check_cases_stream"]})
-
-        try:
-            async for chunk in chain.astream_events(
-                formatted_prompt,
-                version="v1",
-            ):
-                if (
-                    chunk["event"] == "on_chat_model_stream"
-                    and chunk.get("data", {}).get("chunk", {}).content
-                ):
-                    content = chunk["data"]["chunk"].content
-                    yield content
-        except Exception as e:
-            yield f"Error during streaming: {str(e)}"
-
     def parse_report_output(self, text: str, query: str) -> ReportContent:
         """Parse the reporter's markdown output into a structured format."""
         lines = text.strip().split("\n")
@@ -275,59 +205,6 @@ class ReporterAgent:
         self.reports[report_id] = report_content
 
         return report_content
-
-    async def generate_detailed_report_stream(
-        self, report_id: str, point_id: str
-    ) -> AsyncGenerator[str, None]:
-        """選択されたポイントについて詳細な報告を生成する"""
-        # レポートとポイントの取得
-        if report_id not in self.reports:
-            raise ValueError(f"Report with ID {report_id} not found")
-
-        report = self.reports[report_id]
-        point = next((p for p in report.points if p.id == point_id), None)
-        if not point:
-            raise ValueError(f"Point with ID {point_id} not found in report {report_id}")
-
-        # プロンプトの作成
-        prompt = PromptTemplate(
-            template=GENERATE_DETAILED_REPORT_TEMPLATE,
-            input_variables=["context", "title", "content"],
-        )
-        model = self.llm
-
-        # コンテキストの取得
-        search_query = point.title  # タイトルのみを検索クエリとして使用
-        try:
-            context = await self.news_retriever.ainvoke(search_query)
-            if not context:
-                context = [{"page_content": "No relevant information found.", "metadata": {}}]
-        except Exception as e:
-            context = [{"page_content": "Error retrieving information.", "metadata": {}}]
-
-        # プロンプトのフォーマット
-        formatted_prompt = prompt.format(
-            context=context,
-            title=point.title,
-            content=point.content,
-        )
-
-        # ストリーミング用のチェーンを作成
-        chain = (model | StrOutputParser()).with_config({"tags": ["detailed_report_stream"]})
-
-        try:
-            async for chunk in chain.astream_events(
-                formatted_prompt,
-                version="v1",
-            ):
-                if (
-                    chunk["event"] == "on_chat_model_stream"
-                    and chunk.get("data", {}).get("chunk", {}).content
-                ):
-                    content = chunk["data"]["chunk"].content
-                    yield content
-        except Exception as e:
-            yield f"Error during streaming: {str(e)}"
 
 
 class CriticPoint(BaseModel):

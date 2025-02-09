@@ -1,18 +1,7 @@
-import React, { useState } from 'react';
-import {
-  Card,
-  CardContent,
-  Typography,
-  Box,
-  Link,
-  Grid,
-  Radio,
-  Button,
-  IconButton,
-  Collapse
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import React from 'react';
+import { Box, Card, CardContent, Typography, Button, Grid, Pagination, Divider, CircularProgress } from '@mui/material';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Source {
   name: string;
@@ -29,84 +18,103 @@ interface Point {
 interface ReportPointsProps {
   points: Point[];
   onPointSelect: (pointId: string) => void;
+  selectedPointId?: string;
+  initialPage?: number;
+  investigatedPoints: Set<string>;
+  showPaginationInCard?: string;
+  onPageChange?: (page: number) => void;
+  loading?: boolean;
+  loadingPointId?: string;
 }
 
-export const ReportPoints: React.FC<ReportPointsProps> = ({ points, onPointSelect }) => {
-  const [showSelection, setShowSelection] = useState(false);
-  const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
+export const ReportPoints: React.FC<ReportPointsProps> = ({
+  points,
+  onPointSelect,
+  selectedPointId,
+  initialPage = 1,
+  investigatedPoints,
+  showPaginationInCard,
+  onPageChange,
+  loading = false,
+  loadingPointId
+}) => {
+  const [page, setPage] = React.useState(initialPage);
+  const pointsPerPage = 3;
+  const totalPages = Math.ceil(points.length / pointsPerPage);
 
-  const handleInvestigate = (pointId: string) => {
-    if (selectedPoint === pointId) {
-      onPointSelect(pointId);
-    }
+  const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
+    setPage(value);
+    onPageChange?.(value);
   };
+
+  // ページが変更されたときにonPageChangeを呼び出す
+  React.useEffect(() => {
+    onPageChange?.(page);
+  }, [page, onPageChange]);
+
+  const startIndex = (page - 1) * pointsPerPage;
+  const displayedPoints = points.slice(startIndex, startIndex + pointsPerPage);
+
+  const renderPagination = () => (
+    <Box display="flex" justifyContent="center" mt={2} mb={2}>
+      <Pagination
+        count={totalPages}
+        page={page}
+        onChange={handlePageChange}
+        color="primary"
+        size="small"
+      />
+    </Box>
+  );
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">トピック一覧</Typography>
-        <Button
-          variant="outlined"
-          startIcon={<ExpandMoreIcon />}
-          onClick={() => setShowSelection(!showSelection)}
-        >
-          深掘るトピックを選択
-        </Button>
-      </Box>
-
-      <Collapse in={showSelection}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          深掘りしたいトピックを選択してください
-        </Typography>
-      </Collapse>
-
       <Grid container spacing={2}>
-        {points.map((point) => (
-          <Grid item xs={12} key={point.id}>
-            <Card>
+        <Grid item xs={12}>
+          {displayedPoints.map((point) => (
+            <Card
+              key={point.id}
+              sx={{
+                mb: 2,
+                border: selectedPointId === point.id ? '2px solid #1976d2' : 'none',
+              }}
+            >
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  {showSelection && (
-                    <Radio
-                      checked={selectedPoint === point.id}
-                      onChange={() => setSelectedPoint(point.id)}
-                      value={point.id}
-                      name="point-radio"
-                      sx={{ mr: 1 }}
-                    />
-                  )}
-                  <Typography variant="h6" sx={{ flex: 1 }}>
-                    {point.title}
-                  </Typography>
-                  <IconButton
-                    onClick={() => handleInvestigate(point.id)}
-                    disabled={!showSelection || selectedPoint !== point.id}
-                    color="primary"
-                    title="このトピックを深掘りする"
-                  >
-                    <SearchIcon />
-                  </IconButton>
-                </Box>
-                <Typography variant="body1" color="text.secondary" paragraph>
+                <Typography variant="h6" gutterBottom>
+                  {point.title}
+                </Typography>
+                <Typography variant="body1" paragraph>
                   {point.content}
                 </Typography>
-                <Box sx={{ mt: 1 }}>
-                  <Link
-                    href={point.source.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    underline="hover"
-                    color="primary"
-                    sx={{ fontSize: '0.875rem' }}
+                {point.source && (
+                  <Typography variant="body2" color="text.secondary">
+                    出典: <a href={point.source.url} target="_blank" rel="noopener noreferrer">{point.source.name}</a>
+                  </Typography>
+                )}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Button
+                    variant={selectedPointId === point.id ? "contained" : "outlined"}
+                    onClick={() => onPointSelect(point.id)}
+                    disabled={investigatedPoints.has(point.id) || (loading && loadingPointId === point.id)}
+                    sx={{ mt: 1, minWidth: '140px' }}
                   >
-                    出典: {point.source.name}
-                  </Link>
+                    {loading && loadingPointId === point.id ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
+                        調査中...
+                      </Box>
+                    ) : investigatedPoints.has(point.id) ? (
+                      '調査済み'
+                    ) : (
+                      '詳細を調査'
+                    )}
+                  </Button>
+                  {showPaginationInCard === point.id && totalPages > 1 && renderPagination()}
                 </Box>
               </CardContent>
             </Card>
-          </Grid>
-        ))}
+          ))}
+        </Grid>
       </Grid>
     </Box>
   );

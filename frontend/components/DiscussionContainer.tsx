@@ -18,13 +18,15 @@ interface State {
   current_role?: string;
   reporter_content?: string;
   critic_content?: CriticContent;
-  human_selection?: {
-    point_num: number;
-    case_num: number;
+  explored_content?: string;
+  point_selection?: {
+    report_id: string;
+    point_id: string;
   };
   case_report?: string;
   check_content?: string;
   thread_id?: string;
+  report_id?: string;
 }
 
 interface ReportContent {
@@ -48,20 +50,42 @@ interface Source {
 
 const DiscussionContainer: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [loadingPointId, setLoadingPointId] = useState<string | null>(null);
   const [state, setState] = useState<State>({ query: '' });
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportContent | null>(null);
+  const [detailedReport, setDetailedReport] = useState<ReportContent | null>(null);
+  const [investigatedPoints, setInvestigatedPoints] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // 現在のページに応じたトピックタイトルを取得
+  const getCurrentTopicTitle = () => {
+    if (!report) return '';
+    
+    // 詳細レポートが存在し、2ページ目以降の場合
+    if (detailedReport && currentPage > 1) {
+      return detailedReport.topic;
+    }
+    // それ以外の場合は初期トピック
+    return report.topic;
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setLoadingPointId(null);
+    setInvestigatedPoints(new Set()); // リセット
+    setDetailedReport(null); // リセット
     try {
-      const response = await fetch('http://localhost:8000/stream', {
+      const response = await fetch('http://localhost:8000/reporter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          first_call: true,
-          state: { query: state.query },
+          query: state.query,
           thread_id: 1
         }),
       });
@@ -70,39 +94,18 @@ const DiscussionContainer: React.FC = () => {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) return;
-
-      let accumulated_output = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const text = new TextDecoder().decode(value);
-        const lines = text.split('\n\n').filter(line => line.trim());
-        
-        for (const line of lines) {
-          try {
-            const data = JSON.parse(line);
-            if (data.reporter_content) {
-              accumulated_output = data.reporter_content;
-              setState(prev => ({
-                ...prev,
-                reporter_content: accumulated_output
-              }));
-            }
-          } catch (e) {
-            console.error('Error parsing stream data:', e);
-          }
-        }
-      }
+      const data = await response.json();
+      setState(prev => ({
+        ...prev,
+        ...data
+      }));
 
       // レポート内容をパースしてReportContentに変換
-      if (accumulated_output) {
+      if (data.reporter_content) {
         const reportData = {
-          id: new Date().getTime().toString(),
+          id: data.report_id,  // バックエンドから受け取ったreport_idを使用
           topic: state.query,
-          points: parseReportContent(accumulated_output)
+          points: parseReportContent(data.reporter_content)
         };
         setReport(reportData);
       }
@@ -117,21 +120,21 @@ const DiscussionContainer: React.FC = () => {
 
   const handlePointSelect = async (pointId: string) => {
     if (!report) return;
-    setLoading(true);
+    setLoadingPointId(pointId);
     try {
-      const response = await fetch('http://localhost:8000/stream', {
+      const response = await fetch('http://localhost:8000/explore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          first_call: false,
           state: {
-            ...state,
+            query: state.query,
+            current_role: state.current_role,
             reporter_content: state.reporter_content,
-            current_role: 'reporter',
-            human_selection: {
-              point_num: parseInt(pointId),
-              case_num: 0
-            }
+            report_id: state.report_id
+          },
+          point_selection: {
+            report_id: state.report_id,
+            point_id: pointId
           },
           thread_id: 1
         }),
@@ -141,35 +144,28 @@ const DiscussionContainer: React.FC = () => {
         throw new Error(`API error: ${response.status}`);
       }
 
-      // ストリームの処理
-      const reader = response.body?.getReader();
-      if (!reader) return;
+      const data = await response.json();
+      setState(prev => ({
+        ...prev,
+        ...data
+      }));
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const text = new TextDecoder().decode(value);
-        const lines = text.split('\n\n').filter(line => line.trim());
-        
-        for (const line of lines) {
-          try {
-            const data = JSON.parse(line);
-            setState(prev => ({
-              ...prev,
-              ...data
-            }));
-          } catch (e) {
-            console.error('Error parsing stream data:', e);
-          }
-        }
+      // 詳細レポートの内容をパースしてReportContentに変換
+      if (data.explored_content) {
+        const detailedReportData = {
+          id: `${data.report_id}_detailed`,
+          topic: report.points.find(p => p.id === pointId)?.title || '詳細レポート',
+          points: parseReportContent(data.explored_content)
+        };
+        setDetailedReport(detailedReportData);
+        setInvestigatedPoints(prev => new Set(Array.from(prev).concat(pointId)));
       }
 
     } catch (error) {
       console.error('Error:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
-      setLoading(false);
+      setLoadingPointId(null);
     }
   };
 
@@ -224,42 +220,54 @@ const DiscussionContainer: React.FC = () => {
 
   return (
     <Box sx={{ maxWidth: 'lg', mx: 'auto', p: 3 }}>
-      <Card sx={{ mb: 4 }}>
-        <CardContent>
-          <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              value={state.query}
-              onChange={(e) => setState({ ...state, query: e.target.value })}
-              placeholder="質問を入力してください"
-              variant="outlined"
-              sx={{ mb: 2 }}
-            />
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={loading}
-              fullWidth
-            >
-              {loading ? (
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-                  生成中...
-                </Box>
-              ) : (
-                '送信'
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      {!report && (
+        <Card sx={{ mb: 4 }}>
+          <CardContent>
+            <form onSubmit={handleSubmit}>
+              <TextField
+                fullWidth
+                value={state.query}
+                onChange={(e) => setState({ ...state, query: e.target.value })}
+                placeholder="質問を入力してください"
+                variant="outlined"
+                sx={{ mb: 2 }}
+              />
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={loading}
+                fullWidth
+              >
+                {loading ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
+                    生成中...
+                  </Box>
+                ) : (
+                  '送信'
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {report && (
         <Box>
           <Typography variant="h5" sx={{ mb: 3 }}>
-            {report.topic}
+            {getCurrentTopicTitle()}
           </Typography>
-          <ReportPoints points={report.points} onPointSelect={handlePointSelect} />
+          <ReportPoints 
+            points={[...report.points, ...(detailedReport?.points || [])]}
+            onPointSelect={handlePointSelect}
+            selectedPointId={state.point_selection?.point_id}
+            initialPage={detailedReport ? 2 : 1}
+            investigatedPoints={investigatedPoints}
+            showPaginationInCard={state.point_selection?.point_id}
+            onPageChange={handlePageChange}
+            loading={loadingPointId !== null}
+            loadingPointId={loadingPointId || undefined}
+          />
         </Box>
       )}
 
