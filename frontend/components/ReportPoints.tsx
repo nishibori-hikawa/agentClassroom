@@ -20,6 +20,13 @@ interface ReportPointsProps {
   onBack?: () => void;
 }
 
+interface ExpandedPoint {
+  pointId: string;
+  parentId: string;
+  level: number;
+  fullId: string;
+}
+
 export const ReportPoints: React.FC<ReportPointsProps> = ({
   points,
   onPointSelect,
@@ -36,21 +43,26 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
 }) => {
   const POINTS_PER_PAGE = 3;
   const [page, setPage] = useState(1);
-  const [expandedPointId, setExpandedPointId] = useState<string | null>(null);
+  const [expandedPoint, setExpandedPoint] = useState<ExpandedPoint | null>(null);
 
   // ページネーション用のポイント配列を取得
   const paginatedPoints = points.slice((page - 1) * POINTS_PER_PAGE, page * POINTS_PER_PAGE);
   const totalPages = Math.ceil(points.length / POINTS_PER_PAGE);
 
-  // 現在のレベルとparentPointIdのポイントIDのみをチェックするヘルパー関数
+  const getFullId = (pointId: string) => {
+    return `${level}_${parentPointId}_${pointId}`;
+  };
+
   const isInvestigated = (pointId: string) => {
-    const fullId = `${level}_${parentPointId}_${pointId}`;
-    return investigatedPoints.has(fullId);
+    return investigatedPoints.has(getFullId(pointId));
   };
 
   const isLoading = (pointId: string) => {
-    const fullId = `${level}_${parentPointId}_${pointId}`;
-    return loadingPoints.has(fullId);
+    return loadingPoints.has(getFullId(pointId));
+  };
+
+  const isExpanded = (pointId: string) => {
+    return expandedPoint?.fullId === getFullId(pointId);
   };
 
   const renderButtonContent = (point: Point) => {
@@ -63,7 +75,7 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
       );
     }
     if (isInvestigated(point.id)) {
-      if (expandedPointId === point.id) {
+      if (isExpanded(point.id)) {
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <ArrowBackIcon />
@@ -88,9 +100,18 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
   };
 
   const handlePointSelect = (pointId: string) => {
-    const fullId = `${level}_${parentPointId}_${pointId}`;
+    const fullId = getFullId(pointId);
     if (isInvestigated(pointId)) {
-      setExpandedPointId(expandedPointId === pointId ? null : pointId);
+      if (isExpanded(pointId)) {
+        setExpandedPoint(null);
+      } else {
+        setExpandedPoint({
+          pointId,
+          parentId: parentPointId,
+          level,
+          fullId
+        });
+      }
     } else {
       onPointSelect(fullId);
     }
@@ -98,12 +119,12 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
 
   const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
-    setExpandedPointId(null);
+    setExpandedPoint(null);
   };
 
   const handleBack = () => {
-    if (expandedPointId) {
-      setExpandedPointId(null);
+    if (expandedPoint) {
+      setExpandedPoint(null);
     } else if (onBack) {
       onBack();
     }
@@ -124,24 +145,26 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
 
   // 展開されたポイントの詳細レポートを表示
   const renderExpandedPoint = () => {
-    if (!expandedPointId) return null;
+    if (!expandedPoint) return null;
 
-    const expandedPoint = points.find(p => p.id === expandedPointId);
-    if (!expandedPoint?.detailedReport) return null;
+    // 完全なIDを使用してポイントを検索
+    const [_, __, pointId] = expandedPoint.fullId.split('_');
+    const expandedPointData = points.find(p => p.id === pointId);
+    if (!expandedPointData?.detailedReport) return null;
 
     return (
       <ReportPoints
-        points={expandedPoint.detailedReport.points}
+        points={expandedPointData.detailedReport.points}
         onPointSelect={onPointSelect}
         selectedPointId={selectedPointId}
         investigatedPoints={investigatedPoints}
         loading={loading}
         loadingPoints={loadingPoints}
         level={level + 1}
-        parentPointId={expandedPoint.id}
-        pointPath={[...pointPath, expandedPoint.id]}
-        topic={expandedPoint.detailedReport.topic}
-        parentTitle={expandedPoint.title}
+        parentPointId={expandedPoint.pointId}
+        pointPath={[...pointPath, expandedPoint.pointId]}
+        topic={expandedPointData.detailedReport.topic}
+        parentTitle={expandedPointData.title}
         onBack={handleBack}
       />
     );
@@ -167,7 +190,7 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
     );
   };
 
-  if (expandedPointId) {
+  if (expandedPoint) {
     return renderExpandedPoint();
   }
 

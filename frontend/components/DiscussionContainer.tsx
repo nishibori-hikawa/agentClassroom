@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Alert } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import ClearIcon from '@mui/icons-material/Clear';
 import { ReportPoints } from './ReportPoints';
 import { ReportContent, Point } from '../types/report';
 
@@ -233,7 +234,7 @@ const DiscussionContainer: React.FC = () => {
             <form onSubmit={handleSubmit}>
               <TextField
                 fullWidth
-                label="質問を入力してください"
+                label="トピックを入力してください"
                 value={state.query}
                 onChange={(e) => setState(prev => ({ ...prev, query: e.target.value }))}
                 disabled={loading}
@@ -255,9 +256,9 @@ const DiscussionContainer: React.FC = () => {
           <Button
             variant="outlined"
             onClick={handleNewQuestion}
-            startIcon={<AddIcon />}
+            startIcon={<ClearIcon />}
           >
-            新しい質問
+            調査をクリア
           </Button>
         </Box>
       )}
