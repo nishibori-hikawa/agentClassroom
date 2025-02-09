@@ -19,7 +19,7 @@ interface State {
 
 const DiscussionContainer: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [loadingPointId, setLoadingPointId] = useState<string | undefined>(undefined);
+  const [loadingPoints, setLoadingPoints] = useState<Set<string>>(new Set());
   const [state, setState] = useState<State>({ query: '' });
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportContent | null>(null);
@@ -29,7 +29,7 @@ const DiscussionContainer: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setLoadingPointId(undefined);
+    setLoadingPoints(new Set());
     setInvestigatedPoints(new Set());
     setReport(null);
     try {
@@ -83,7 +83,7 @@ const DiscussionContainer: React.FC = () => {
     // 既に調査済みの場合は何もしない
     if (investigatedPoints.has(fullPointId)) return;
 
-    setLoadingPointId(pointId);
+    setLoadingPoints(prev => new Set(prev).add(fullPointId));
     try {
       const response = await fetch('http://localhost:8000/explore', {
         method: 'POST',
@@ -173,7 +173,11 @@ const DiscussionContainer: React.FC = () => {
       console.error('Error:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
-      setLoadingPointId(undefined);
+      setLoadingPoints(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(fullPointId);
+        return newSet;
+      });
     }
   };
 
@@ -275,7 +279,7 @@ const DiscussionContainer: React.FC = () => {
             selectedPointId={state.point_selection?.point_id}
             investigatedPoints={investigatedPoints}
             loading={loading}
-            loadingPointId={loadingPointId}
+            loadingPoints={loadingPoints}
             level={0}
           />
         </Box>

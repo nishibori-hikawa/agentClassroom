@@ -8,7 +8,7 @@ interface ReportPointsProps {
   selectedPointId?: string;
   investigatedPoints: Set<string>;
   loading?: boolean;
-  loadingPointId?: string;
+  loadingPoints: Set<string>;
   level?: number;
   parentPointId?: string;
 }
@@ -19,7 +19,7 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
   selectedPointId,
   investigatedPoints,
   loading = false,
-  loadingPointId,
+  loadingPoints,
   level = 0,
   parentPointId = 'root'
 }) => {
@@ -29,8 +29,13 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
     return investigatedPoints.has(fullId);
   };
 
+  const isLoading = (pointId: string) => {
+    const fullId = `${level}_${parentPointId}_${pointId}`;
+    return loadingPoints.has(fullId);
+  };
+
   const renderButtonContent = (point: Point) => {
-    if (loadingPointId === point.id) {
+    if (isLoading(point.id)) {
       return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <CircularProgress size={20} color="inherit" />
@@ -77,7 +82,7 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
                   <Button
                     variant={selectedPointId === `${level}_${parentPointId}_${point.id}` ? "contained" : "outlined"}
                     onClick={() => handlePointSelect(point.id)}
-                    disabled={loading || loadingPointId === point.id}
+                    disabled={loading || isLoading(point.id)}
                     sx={{ 
                       mt: 1, 
                       minWidth: '140px',
@@ -97,7 +102,7 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
                       selectedPointId={selectedPointId}
                       investigatedPoints={investigatedPoints}
                       loading={loading}
-                      loadingPointId={loadingPointId}
+                      loadingPoints={loadingPoints}
                       level={level + 1}
                       parentPointId={point.id}
                     />
