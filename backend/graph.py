@@ -163,7 +163,7 @@ def main():
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     retriever = create_tavily_search_api_retriever()
     agent = AgentClassroom(llm, retriever)
-    init_state = State(query="中国の国家体制")
+    init_state = State(query="日米首脳会談")
 
     # 初期状態から開始（reporterノード）
     print("\nExecuting reporter node:")

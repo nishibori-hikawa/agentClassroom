@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, List, TypedDict
+from typing import TYPE_CHECKING, List, TypedDict, Optional, Annotated
+from typing_extensions import TypeVar
 import json
 
 from dotenv import load_dotenv
@@ -30,17 +31,25 @@ class Source(BaseModel):
     url: str
 
 
+class ReportContent(BaseModel):
+    id: str
+    topic: str
+    points: list["ReporterPoint"] = Field(default_factory=list)
+    thread_id: Optional[str] = None
+
+
+class Thread(BaseModel):
+    id: str
+    report: Optional[ReportContent] = None
+
+
 class ReporterPoint(BaseModel):
     id: str
     title: str
     content: str
     source: Source
-
-
-class ReportContent(BaseModel):
-    id: str
-    topic: str
-    points: list[ReporterPoint] = Field(default_factory=list)
+    report_id: str
+    detailed_report: Optional[ReportContent] = None
 
 
 class PointSelection(BaseModel):
@@ -69,7 +78,6 @@ class ReporterAgent:
             raise ValueError(f"Point with ID {point_id} not found in report {report_id}")
 
         return PointSelection(report_id=report_id, point_id=point_id)
-
 
     def generate_report(self, query: str) -> str:
         """非ストリーミングバージョンのレポート生成メソッド"""
@@ -164,6 +172,8 @@ class ReporterAgent:
                             title=current_point["title"],
                             content=current_point["content"].strip(),
                             source=current_point["source"],
+                            report_id=current_point["report_id"],
+                            detailed_report=current_point["detailed_report"],
                         )
                     )
                 # 新しいポイントの開始
@@ -173,6 +183,8 @@ class ReporterAgent:
                     "title": title,
                     "content": "",
                     "source": None,
+                    "report_id": "",
+                    "detailed_report": None,
                 }
             elif current_point and "[出典:" in line:
                 # Extract source information
@@ -192,6 +204,8 @@ class ReporterAgent:
                     title=current_point["title"],
                     content=current_point["content"].strip(),
                     source=current_point["source"],
+                    report_id=current_point["report_id"],
+                    detailed_report=current_point["detailed_report"],
                 )
             )
 
@@ -232,6 +246,71 @@ class CriticAgent:
 
         # Execute chain and return result
         return chain.invoke({"report_text": report_text})
+
+
+async def test_hierarchical_structure():
+    print("\nTesting hierarchical data structure:")
+    print("-" * 50)
+
+    # Initialize reporter
+    reporter = ReporterAgent(llm)
+
+    # 1. Create initial thread
+    thread = Thread(id="thread_1")
+    print(f"Created thread with ID: {thread.id}")
+
+    # 2. Generate initial report
+    query = "日米首脳会談"
+    report_text = reporter.generate_report(query)
+    initial_report = reporter.parse_report_output(report_text, query)
+    initial_report.thread_id = thread.id
+    thread.report = initial_report
+    print(f"\nCreated initial report:")
+    print(f"Report ID: {initial_report.id}")
+    print(f"Topic: {initial_report.topic}")
+    print(f"Number of points: {len(initial_report.points)}")
+
+    # 3. Select a point and generate detailed report
+    if initial_report.points:
+        point = initial_report.points[0]
+        detailed_report_text = reporter.generate_detailed_report(initial_report.id, point.id)
+        detailed_report = reporter.parse_report_output(detailed_report_text, point.title)
+        point.detailed_report = detailed_report
+        print(f"\nCreated detailed report for point {point.id}:")
+        print(f"Detailed Report ID: {detailed_report.id}")
+        print(f"Topic: {detailed_report.topic}")
+        print(f"Number of sub-points: {len(detailed_report.points)}")
+
+        # 4. Test nested structure by generating another level
+        if detailed_report.points:
+            nested_point = detailed_report.points[0]
+            nested_report_text = reporter.generate_detailed_report(
+                detailed_report.id, nested_point.id
+            )
+            nested_report = reporter.parse_report_output(nested_report_text, nested_point.title)
+            nested_point.detailed_report = nested_report
+            print(f"\nCreated nested report for point {nested_point.id}:")
+            print(f"Nested Report ID: {nested_report.id}")
+            print(f"Topic: {nested_report.topic}")
+            print(f"Number of sub-points: {len(nested_report.points)}")
+
+    # 5. Verify the complete structure
+    print("\nVerifying complete structure:")
+    print(f"Thread ID: {thread.id}")
+    if thread.report:
+        print(f"├── Report: {thread.report.id}")
+        for point in thread.report.points:
+            print(f"│   ├── Point: {point.id} - {point.title}")
+            if point.detailed_report:
+                print(f"│   │   ├── Detailed Report: {point.detailed_report.id}")
+                for sub_point in point.detailed_report.points:
+                    print(f"│   │   │   ├── Sub-Point: {sub_point.id} - {sub_point.title}")
+                    if sub_point.detailed_report:
+                        print(f"│   │   │   │   ├── Nested Report: {sub_point.detailed_report.id}")
+                        for nested_point in sub_point.detailed_report.points:
+                            print(
+                                f"│   │   │   │   │   ├── Nested Point: {nested_point.id} - {nested_point.title}"
+                            )
 
 
 if __name__ == "__main__":
@@ -289,5 +368,6 @@ if __name__ == "__main__":
 
         print("\nTest completed.")
 
-    # Run the test
+    # Run both tests
     asyncio.run(test_reporter())
+    asyncio.run(test_hierarchical_structure())
