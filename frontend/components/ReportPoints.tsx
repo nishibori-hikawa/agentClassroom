@@ -1,82 +1,64 @@
 import React from 'react';
-import { Box, Card, CardContent, Typography, Button, Grid, Pagination, Divider, CircularProgress } from '@mui/material';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-
-interface Source {
-  name: string;
-  url: string;
-}
-
-interface Point {
-  id: string;
-  title: string;
-  content: string;
-  source: Source;
-}
+import { Box, Card, CardContent, Typography, Button, Grid, CircularProgress } from '@mui/material';
+import { Point } from '../types/report';
 
 interface ReportPointsProps {
   points: Point[];
   onPointSelect: (pointId: string) => void;
   selectedPointId?: string;
-  initialPage?: number;
   investigatedPoints: Set<string>;
-  showPaginationInCard?: string;
-  onPageChange?: (page: number) => void;
   loading?: boolean;
   loadingPointId?: string;
+  level?: number;
+  parentPointId?: string;
 }
 
 export const ReportPoints: React.FC<ReportPointsProps> = ({
   points,
   onPointSelect,
   selectedPointId,
-  initialPage = 1,
   investigatedPoints,
-  showPaginationInCard,
-  onPageChange,
   loading = false,
-  loadingPointId
+  loadingPointId,
+  level = 0,
+  parentPointId = 'root'
 }) => {
-  const [page, setPage] = React.useState(initialPage);
-  const pointsPerPage = 3;
-  const totalPages = Math.ceil(points.length / pointsPerPage);
-
-  const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
-    setPage(value);
-    onPageChange?.(value);
+  // 現在のレベルとparentPointIdのポイントIDのみをチェックするヘルパー関数
+  const isInvestigated = (pointId: string) => {
+    const fullId = `${level}_${parentPointId}_${pointId}`;
+    return investigatedPoints.has(fullId);
   };
 
-  // ページが変更されたときにonPageChangeを呼び出す
-  React.useEffect(() => {
-    onPageChange?.(page);
-  }, [page, onPageChange]);
+  const renderButtonContent = (point: Point) => {
+    if (loadingPointId === point.id) {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CircularProgress size={20} color="inherit" />
+          調査中...
+        </Box>
+      );
+    }
+    if (isInvestigated(point.id)) {
+      return '詳細を見る';
+    }
+    return '詳細を調査';
+  };
 
-  const startIndex = (page - 1) * pointsPerPage;
-  const displayedPoints = points.slice(startIndex, startIndex + pointsPerPage);
-
-  const renderPagination = () => (
-    <Box display="flex" justifyContent="center" mt={2} mb={2}>
-      <Pagination
-        count={totalPages}
-        page={page}
-        onChange={handlePageChange}
-        color="primary"
-        size="small"
-      />
-    </Box>
-  );
+  const handlePointSelect = (pointId: string) => {
+    const fullId = `${level}_${parentPointId}_${pointId}`;
+    onPointSelect(fullId);
+  };
 
   return (
     <Box>
       <Grid container spacing={2}>
         <Grid item xs={12}>
-          {displayedPoints.map((point) => (
+          {points.map((point) => (
             <Card
               key={point.id}
               sx={{
                 mb: 2,
-                border: selectedPointId === point.id ? '2px solid #1976d2' : 'none',
+                border: selectedPointId === `${level}_${parentPointId}_${point.id}` ? '2px solid #1976d2' : 'none',
               }}
             >
               <CardContent>
@@ -93,24 +75,34 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
                 )}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Button
-                    variant={selectedPointId === point.id ? "contained" : "outlined"}
-                    onClick={() => onPointSelect(point.id)}
-                    disabled={investigatedPoints.has(point.id) || (loading && loadingPointId === point.id)}
-                    sx={{ mt: 1, minWidth: '140px' }}
+                    variant={selectedPointId === `${level}_${parentPointId}_${point.id}` ? "contained" : "outlined"}
+                    onClick={() => handlePointSelect(point.id)}
+                    disabled={loading || loadingPointId === point.id}
+                    sx={{ 
+                      mt: 1, 
+                      minWidth: '140px',
+                      '& .MuiCircularProgress-root': {
+                        marginRight: 1
+                      }
+                    }}
                   >
-                    {loading && loadingPointId === point.id ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-                        調査中...
-                      </Box>
-                    ) : investigatedPoints.has(point.id) ? (
-                      '調査済み'
-                    ) : (
-                      '詳細を調査'
-                    )}
+                    {renderButtonContent(point)}
                   </Button>
-                  {showPaginationInCard === point.id && totalPages > 1 && renderPagination()}
                 </Box>
+                {isInvestigated(point.id) && point.detailedReport && (
+                  <Box sx={{ mt: 2, ml: 2 }}>
+                    <ReportPoints
+                      points={point.detailedReport.points}
+                      onPointSelect={onPointSelect}
+                      selectedPointId={selectedPointId}
+                      investigatedPoints={investigatedPoints}
+                      loading={loading}
+                      loadingPointId={loadingPointId}
+                      level={level + 1}
+                      parentPointId={point.id}
+                    />
+                  </Box>
+                )}
               </CardContent>
             </Card>
           ))}

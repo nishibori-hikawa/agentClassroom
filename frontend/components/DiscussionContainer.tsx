@@ -1,85 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Grid, Alert } from '@mui/material';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import React, { useState } from 'react';
+import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Alert } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 import { ReportPoints } from './ReportPoints';
-
-interface CriticPoint {
-  title: string;
-  cases: [string, string];
-}
-
-interface CriticContent {
-  points: CriticPoint[];
-}
+import { ReportContent, Point } from '../types/report';
 
 interface State {
   query: string;
   current_role?: string;
   reporter_content?: string;
-  critic_content?: CriticContent;
   explored_content?: string;
   point_selection?: {
     report_id: string;
     point_id: string;
   };
-  case_report?: string;
-  check_content?: string;
   thread_id?: string;
   report_id?: string;
 }
 
-interface ReportContent {
-  id: string;
-  topic: string;
-  points: {
-    id: string;
-    title: string;
-    content: string;
-    source: {
-      name: string;
-      url: string;
-    };
-  }[];
-}
-
-interface Source {
-  name: string;
-  url: string;
-}
-
 const DiscussionContainer: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [loadingPointId, setLoadingPointId] = useState<string | null>(null);
+  const [loadingPointId, setLoadingPointId] = useState<string | undefined>(undefined);
   const [state, setState] = useState<State>({ query: '' });
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportContent | null>(null);
-  const [detailedReport, setDetailedReport] = useState<ReportContent | null>(null);
   const [investigatedPoints, setInvestigatedPoints] = useState<Set<string>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
-
-  // 現在のページに応じたトピックタイトルを取得
-  const getCurrentTopicTitle = () => {
-    if (!report) return '';
-    
-    // 詳細レポートが存在し、2ページ目以降の場合
-    if (detailedReport && currentPage > 1) {
-      return detailedReport.topic;
-    }
-    // それ以外の場合は初期トピック
-    return report.topic;
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
+  const [showForm, setShowForm] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setLoadingPointId(null);
-    setInvestigatedPoints(new Set()); // リセット
-    setDetailedReport(null); // リセット
+    setLoadingPointId(undefined);
+    setInvestigatedPoints(new Set());
+    setReport(null);
     try {
       const response = await fetch('http://localhost:8000/reporter', {
         method: 'POST',
@@ -100,14 +52,10 @@ const DiscussionContainer: React.FC = () => {
         ...data
       }));
 
-      // レポート内容をパースしてReportContentに変換
       if (data.reporter_content) {
-        const reportData = {
-          id: data.report_id,  // バックエンドから受け取ったreport_idを使用
-          topic: state.query,
-          points: parseReportContent(data.reporter_content)
-        };
+        const reportData = parseReportContent(data.reporter_content, data.report_id, state.query);
         setReport(reportData);
+        setShowForm(false);
       }
 
     } catch (error) {
@@ -118,8 +66,23 @@ const DiscussionContainer: React.FC = () => {
     }
   };
 
-  const handlePointSelect = async (pointId: string) => {
+  const handleNewQuestion = () => {
+    setShowForm(true);
+    setReport(null);
+    setState({ query: '' });
+    setError(null);
+    setInvestigatedPoints(new Set());
+  };
+
+  const handlePointSelect = async (fullPointId: string) => {
     if (!report) return;
+
+    // レベル、親ポイントID、ポイントIDを分離
+    const [level, parentPointId, pointId] = fullPointId.split('_');
+
+    // 既に調査済みの場合は何もしない
+    if (investigatedPoints.has(fullPointId)) return;
+
     setLoadingPointId(pointId);
     try {
       const response = await fetch('http://localhost:8000/explore', {
@@ -150,51 +113,89 @@ const DiscussionContainer: React.FC = () => {
         ...data
       }));
 
-      // 詳細レポートの内容をパースしてReportContentに変換
       if (data.explored_content) {
-        const detailedReportData = {
-          id: `${data.report_id}_detailed`,
-          topic: report.points.find(p => p.id === pointId)?.title || '詳細レポート',
-          points: parseReportContent(data.explored_content)
-        };
-        setDetailedReport(detailedReportData);
-        setInvestigatedPoints(prev => new Set(Array.from(prev).concat(pointId)));
+        const detailedReportData = parseReportContent(
+          data.explored_content,
+          `${data.report_id}_${pointId}`,
+          report.points.find(p => p.id === pointId)?.title || '詳細レポート'
+        );
+
+        // レポート構造を更新
+        setReport(prev => {
+          if (!prev) return null;
+
+          // 親ポイントIDがrootの場合は最上位レベルのポイント
+          if (parentPointId === 'root') {
+            return {
+              ...prev,
+              points: prev.points.map(point => {
+                if (point.id === pointId) {
+                  return {
+                    ...point,
+                    detailedReport: detailedReportData
+                  };
+                }
+                return point;
+              })
+            };
+          }
+
+          // 親ポイントIDが指定されている場合は、そのポイント配下の詳細レポートを更新
+          return {
+            ...prev,
+            points: prev.points.map(point => {
+              if (point.id === parentPointId && point.detailedReport) {
+                return {
+                  ...point,
+                  detailedReport: {
+                    ...point.detailedReport,
+                    points: point.detailedReport.points.map(subPoint => {
+                      if (subPoint.id === pointId) {
+                        return {
+                          ...subPoint,
+                          detailedReport: detailedReportData
+                        };
+                      }
+                      return subPoint;
+                    })
+                  }
+                };
+              }
+              return point;
+            })
+          };
+        });
+
+        setInvestigatedPoints(prev => new Set(prev).add(fullPointId));
       }
 
     } catch (error) {
       console.error('Error:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
-      setLoadingPointId(null);
+      setLoadingPointId(undefined);
     }
   };
 
-  // レポート内容をパースする関数
-  const parseReportContent = (text: string): any[] => {
+  const parseReportContent = (text: string, reportId: string, topic: string): ReportContent => {
     const lines = text.split('\n');
-    const points = [];
-    let currentPoint: {
-      id: string;
-      title: string;
-      content: string;
-      source: Source | null;
-    } | null = null;
+    const points: Point[] = [];
+    let currentPoint: Partial<Point> | null = null;
 
     for (const line of lines) {
       if (!line.trim()) continue;
 
       if (line.match(/^\d+\.\s+\*\*/)) {
-        // 前のポイントがあれば追加
         if (currentPoint) {
-          points.push(currentPoint);
+          points.push(currentPoint as Point);
         }
-        // タイトルの抽出を修正 - **[タイトル]** から **タイトル** の形式に変更
         const titleMatch = line.match(/\*\*(.*?)\*\*/);
         currentPoint = {
           id: (points.length + 1).toString(),
           title: titleMatch ? titleMatch[1].trim() : '',
           content: '',
-          source: null
+          source: { name: '', url: '' },
+          report_id: reportId
         };
       } else if (currentPoint && line.includes('[出典:')) {
         const sourceMatch = line.match(/\[出典:\s*(.*?)\]\((.*?)\)/);
@@ -204,77 +205,80 @@ const DiscussionContainer: React.FC = () => {
             url: sourceMatch[2].trim()
           };
         }
-      } else if (currentPoint && !line.includes('[出典:')) {
-        // 出典行以外の場合はコンテンツとして追加
-        currentPoint.content += line.trim() + ' ';
+      } else if (currentPoint) {
+        currentPoint.content = (currentPoint.content || '') + line.trim() + ' ';
       }
     }
 
-    // 最後のポイントを追加
     if (currentPoint) {
-      points.push(currentPoint);
+      points.push(currentPoint as Point);
     }
 
-    return points;
+    return {
+      id: reportId,
+      topic,
+      points
+    };
   };
 
   return (
     <Box sx={{ maxWidth: 'lg', mx: 'auto', p: 3 }}>
-      {!report && (
+      {showForm ? (
         <Card sx={{ mb: 4 }}>
           <CardContent>
             <form onSubmit={handleSubmit}>
               <TextField
                 fullWidth
+                label="質問を入力してください"
                 value={state.query}
-                onChange={(e) => setState({ ...state, query: e.target.value })}
-                placeholder="質問を入力してください"
-                variant="outlined"
+                onChange={(e) => setState(prev => ({ ...prev, query: e.target.value }))}
+                disabled={loading}
                 sx={{ mb: 2 }}
               />
               <Button
                 type="submit"
                 variant="contained"
-                disabled={loading}
-                fullWidth
+                disabled={loading || !state.query.trim()}
+                sx={{ minWidth: '120px' }}
               >
-                {loading ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-                    生成中...
-                  </Box>
-                ) : (
-                  '送信'
-                )}
+                {loading ? <CircularProgress size={24} /> : '質問する'}
               </Button>
             </form>
           </CardContent>
         </Card>
-      )}
-
-      {report && (
-        <Box>
-          <Typography variant="h5" sx={{ mb: 3 }}>
-            {getCurrentTopicTitle()}
-          </Typography>
-          <ReportPoints 
-            points={[...report.points, ...(detailedReport?.points || [])]}
-            onPointSelect={handlePointSelect}
-            selectedPointId={state.point_selection?.point_id}
-            initialPage={detailedReport ? 2 : 1}
-            investigatedPoints={investigatedPoints}
-            showPaginationInCard={state.point_selection?.point_id}
-            onPageChange={handlePageChange}
-            loading={loadingPointId !== null}
-            loadingPointId={loadingPointId || undefined}
-          />
+      ) : (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={handleNewQuestion}
+            startIcon={<AddIcon />}
+          >
+            新しい質問
+          </Button>
         </Box>
       )}
 
       {error && (
-        <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+        <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
+      )}
+
+      {report && (
+        <Box>
+          <Typography variant="h5" gutterBottom>
+            {report.topic}
+          </Typography>
+          <ReportPoints
+            points={report.points}
+            onPointSelect={handlePointSelect}
+            selectedPointId={state.point_selection?.point_id}
+            investigatedPoints={investigatedPoints}
+            loading={loading}
+            loadingPointId={loadingPointId}
+            level={0}
+          />
+        </Box>
       )}
     </Box>
   );
