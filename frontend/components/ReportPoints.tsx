@@ -262,20 +262,20 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
                     onClick={() => onExtractPoints?.({ 
                       title: point.title, 
                       content: point.content,
-                      id: point.id
+                      id: getFullId(point.id)
                     })}
-                    disabled={loading || loadingCriticPoints.has(point.id) || extractedPoints.has(point.id)}
+                    disabled={loading || loadingCriticPoints.has(getFullId(point.id)) || extractedPoints.has(getFullId(point.id))}
                     sx={{ 
                       mt: 1,
                       position: 'relative',
                       minWidth: '100px'
                     }}
                   >
-                    {loadingCriticPoints.has(point.id) ? (
+                    {loadingCriticPoints.has(getFullId(point.id)) ? (
                       <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <CircularProgress size={20} color="inherit" />
                       </Box>
-                    ) : extractedPoints.has(point.id) ? (
+                    ) : extractedPoints.has(getFullId(point.id)) ? (
                       '抽出済み'
                     ) : (
                       '論点抽出'

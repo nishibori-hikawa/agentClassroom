@@ -283,6 +283,10 @@ const DiscussionContainer: React.FC = () => {
 
   const handleExtractPoints = async (point: { title: string; content: string; id?: string }) => {
     if (!point.id) return;
+    
+    // fullIdから実際のpoint_idを抽出（形式: `${level}_${parentPointId}_${pointId}`）
+    const [_, __, pointId] = point.id.split('_');
+    
     setLoadingCriticPoints(prev => new Set(prev).add(point.id!));
     try {
       const requestPayload = {
@@ -295,7 +299,7 @@ const DiscussionContainer: React.FC = () => {
         },
         point_selection_for_critic: {
           report_id: state.report_id,
-          point_id: point.id,
+          point_id: pointId,
           title: point.title,
           content: point.content
         },
