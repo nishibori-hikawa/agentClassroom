@@ -1,14 +1,13 @@
 import logging
-from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from graph import AgentClassroom, State, PointSelection
-from retrievers import create_tavily_search_api_retriever
+from agent import PointSelection
+from controller import CriticController, ExploreController, ReportController, State
 
 load_dotenv()
 
@@ -31,8 +30,9 @@ llm = ChatOpenAI(
     temperature=0,
 )
 
-retriever = create_tavily_search_api_retriever()
-graph = AgentClassroom(llm, retriever)
+reporter_controller = ReportController(llm=llm)
+explore_controller = ExploreController(llm=llm)
+critic_controller = CriticController(llm=llm)
 
 
 class QueryRequest(BaseModel):
@@ -51,8 +51,7 @@ async def reporter(request: QueryRequest) -> State:
     """初回の要点を生成するエンドポイント"""
     try:
         initial_state = State(query=request.query, thread_id=str(request.thread_id))
-        result = graph.invoke_node("reporter", initial_state)
-        return result
+        return reporter_controller.post(initial_state)
     except Exception as e:
         logging.error(f"Error in reporter node: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -64,8 +63,7 @@ async def explore(request: PointSelectionRequest) -> State:
     try:
         state = request.state
         state.point_selection_for_critic = request.point_selection_for_critic
-        result = graph.invoke_node("explore_report", state)
-        return result
+        return explore_controller.post(state)
     except Exception as e:
         logging.error(f"Error in explore node: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -87,8 +85,7 @@ async def critic(request: PointSelectionRequest) -> State:
         print(
             f"Debug - Critic endpoint: First 100 chars of explored content: {state.explored_content[:100] if state.explored_content else 'No content'}"
         )
-        result = graph.invoke_node("critic", state)
-        return result
+        return critic_controller.post(state)
     except Exception as e:
         logging.error(f"Error in critic node: {e}")
         raise HTTPException(status_code=500, detail=str(e))

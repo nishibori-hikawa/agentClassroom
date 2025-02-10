@@ -1,26 +1,24 @@
-from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, List, TypedDict, Optional, Annotated
-from typing_extensions import TypeVar
 import json
+from collections.abc import AsyncGenerator
+from datetime import datetime
+from typing import TYPE_CHECKING, Annotated, List, Optional, TypedDict
 
 from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
-from datetime import datetime
 
+from retrievers import create_general_retriever, create_news_retriever
 from templates import (
     CHECK_CASES_TEMPLATE,
     CRITIQUE_TEMPLATE,
-    GENERATE_REPORT_TEMPLATE,
     GENERATE_DETAILED_REPORT_TEMPLATE,
+    GENERATE_REPORT_TEMPLATE,
 )
-from retrievers import create_news_retriever, create_general_retriever
 
 if TYPE_CHECKING:
     from langchain_core.runnables import Runnable
@@ -248,6 +246,20 @@ class CriticAgent:
 
         # Execute chain and return result
         return chain.invoke({"title": title, "content": content})
+
+
+class TeacharAgent:
+    def __init__(self, llm):
+        self.llm = llm
+
+    def generate_critique_feedback(self, critic_points: list[CriticPoint]) -> str:
+        prompt = ChatPromptTemplate.from_template(template=CRITIQUE_TEMPLATE)
+
+        # Create chain
+        chain = prompt | self.llm | StrOutputParser()
+
+        # Execute chain and return result
+        return chain.invoke({"critic_points": critic_points})
 
 
 async def test_hierarchical_structure():

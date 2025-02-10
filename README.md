@@ -25,7 +25,7 @@ NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 Agent Classroomのバックエンドを起動するには以下のコマンドを実行してください。
 ```bash
 cd backend
-poetry run uvicorn main:app --reload
+poetry run uvicorn server:app --reload
 ```
 
 Agent Classroomのフロントエンドを起動するには以下のコマンドを実行してください。
@@ -35,7 +35,7 @@ npm run dev
 ```
 
 ## cloud run
-
+せっていs
 ### プロジェクトIDとリージョンの設定
 
 ```bash
