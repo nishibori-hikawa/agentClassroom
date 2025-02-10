@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
+from langchain_google_vertexai import ChatVertexAI
 from pydantic import BaseModel
 
 from graph import AgentClassroom, State, PointSelection
@@ -26,6 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# llm = ChatVertexAI()
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0,
