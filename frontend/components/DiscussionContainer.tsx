@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Alert } from '@mui/material';
+import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Alert, Grid } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ClearIcon from '@mui/icons-material/Clear';
 import { ReportPoints } from './ReportPoints';
+import { CriticPoints } from './CriticPoints';
 import { ReportContent, Point } from '../types/report';
 
 interface State {
@@ -26,6 +27,8 @@ const DiscussionContainer: React.FC = () => {
   const [report, setReport] = useState<ReportContent | null>(null);
   const [investigatedPoints, setInvestigatedPoints] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(true);
+  const [criticPoints, setCriticPoints] = useState<Array<{ title: string; content: string }> | null>(null);
+  const [loadingCritic, setLoadingCritic] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,15 +86,6 @@ const DiscussionContainer: React.FC = () => {
     detailedReportData: ReportContent,
     selectedPoint: Point
   ): Point[] => {
-    console.group('updateReportPoints Debug');
-    console.log('Input Parameters:', {
-      level,
-      parentId,
-      targetPointId,
-      detailedReportData,
-      selectedPoint
-    });
-
     let result;
     // level === 0 の場合はトップレベルのポイントを直接更新
     if (level === 0) {
@@ -104,44 +98,31 @@ const DiscussionContainer: React.FC = () => {
     } else {
       // level > 0 の場合は、まず対象の親ノードを探す
       result = points.map(point => {
-        console.log('Processing point:', { pointId: point.id, parentId, targetPointId });
-        
         if (point.id === parentId) {
-          console.log('Found parent point:', { point });
           // 対象親ノードの detailedReport がなければ初期化
           const currentDetailedReport = point.detailedReport || {
             id: `${level}_${parentId}`,
             topic: point.title,
             points: [] as Point[]
           };
-          console.log('Current detailed report:', { currentDetailedReport });
 
           // 対象の子ノードが存在すれば更新、なければ追加
           const updatedChildren = currentDetailedReport.points.map(child => {
             if (child.id === targetPointId) {
-              console.log('Updating existing child point:', { childId: child.id });
               return { ...child, detailedReport: detailedReportData };
             }
             return child;
           });
 
           if (!currentDetailedReport.points.some(child => child.id === targetPointId)) {
-            console.log('Adding new child point:', { targetPointId });
             updatedChildren.push({ ...selectedPoint, detailedReport: detailedReportData });
           }
 
-          const updatedPoint = {
+          return {
             ...point,
             detailedReport: { ...currentDetailedReport, points: updatedChildren }
           };
-          console.log('Updated parent point:', { updatedPoint });
-          return updatedPoint;
         } else if (point.detailedReport?.points) {
-          console.log('Recursing into nested points:', { 
-            pointId: point.id, 
-            hasDetailedReport: !!point.detailedReport,
-            pointsCount: point.detailedReport?.points?.length 
-          });
           return {
             ...point,
             detailedReport: {
@@ -160,35 +141,18 @@ const DiscussionContainer: React.FC = () => {
         return point;
       });
     }
-    console.log('Result points:', result);
-    console.groupEnd();
     return result;
   };
 
   const handlePointSelect = async (fullPointId: string) => {
     if (!report) return;
 
-    console.group('handlePointSelect Debug');
-    console.log('Initial state:', {
-      fullPointId,
-      currentReport: report,
-      currentState: state
-    });
-
     // fullPointId の形式は `${level}_${parentPointId}_${pointId}` なので分解する
     const [levelStr, parentPointId, pointId] = fullPointId.split('_');
     const level = parseInt(levelStr, 10);
 
-    console.log('Parsed point info:', {
-      level,
-      parentPointId,
-      pointId
-    });
-
     // 既に調査済みの場合は何もしない
     if (investigatedPoints.has(fullPointId)) {
-      console.log('Point already investigated:', fullPointId);
-      console.groupEnd();
       return;
     }
 
@@ -225,21 +189,8 @@ const DiscussionContainer: React.FC = () => {
 
     const selectedPoint = findSelectedPoint(report.points, pointId, level, 0, parentPointId);
     if (!selectedPoint) {
-      console.error('Selected point not found:', { pointId, level, parentPointId });
       return;
     }
-
-    console.group('DiscussionContainer Point Selection');
-    console.log('Received Point Selection:', {
-      fullPointId,
-      level,
-      parentPointId,
-      pointId,
-      currentReport: report,
-      currentState: state,
-      selectedPoint
-    });
-    console.groupEnd();
 
     setLoadingPoints(prev => new Set(prev).add(fullPointId));
     try {
@@ -257,8 +208,6 @@ const DiscussionContainer: React.FC = () => {
         thread_id: 1
       };
 
-      console.log('Backend Request:', requestData);
-
       const response = await fetch('http://localhost:8000/explore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -270,7 +219,6 @@ const DiscussionContainer: React.FC = () => {
       }
 
       const data = await response.json();
-      console.log('Backend Response:', data);
 
       setState(prev => ({
         ...prev,
@@ -280,29 +228,16 @@ const DiscussionContainer: React.FC = () => {
       if (data.explored_content) {
         // バックエンドから返された report_id を使用
         const newReportId = data.report_id || `${level}_${parentPointId}_${pointId}`;
-        console.log('New report ID:', {
-          fromBackend: data.report_id,
-          generated: `${level}_${parentPointId}_${pointId}`,
-          final: newReportId
-        });
         
         const detailedReportData = parseReportContent(
           data.explored_content,
           newReportId,
           selectedPoint.title
         );
-        console.log('Parsed detailed report:', detailedReportData);
 
         // ここで再帰的更新を実施
         setReport(prev => {
           if (!prev) return null;
-          console.log('Updating report:', {
-            previousReport: prev,
-            newReportId,
-            level,
-            parentPointId,
-            pointId
-          });
 
           const updatedPoints = updateReportPoints(
             prev.points,
@@ -313,31 +248,17 @@ const DiscussionContainer: React.FC = () => {
             selectedPoint
           );
 
-          const updatedReport = { 
+          return { 
             ...prev, 
             points: updatedPoints, 
             id: newReportId
           };
-
-          console.log('Final report update:', {
-            previousId: prev.id,
-            newId: newReportId,
-            updatedReport
-          });
-          return updatedReport;
         });
 
-        setState(prev => {
-          const newState = {
-            ...prev,
-            report_id: newReportId
-          };
-          console.log('State update:', {
-            previousState: prev,
-            newState
-          });
-          return newState;
-        });
+        setState(prev => ({
+          ...prev,
+          report_id: newReportId
+        }));
 
         setInvestigatedPoints(prev => new Set(prev).add(fullPointId));
       }
@@ -352,9 +273,36 @@ const DiscussionContainer: React.FC = () => {
         return newSet;
       });
     }
-    console.groupEnd();
   };
 
+  const handleExtractPoints = async (point: { title: string; content: string }) => {
+    setLoadingCritic(true);
+    try {
+      const response = await fetch('http://localhost:8000/critic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: point.title,
+          content: point.content,
+          thread_id: 1
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.critic_points) {
+        setCriticPoints(data.critic_points);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
+    } finally {
+      setLoadingCritic(false);
+    }
+  };
 
   const parseReportContent = (text: string, reportId: string, topic: string): ReportContent => {
     const lines = text.split('\n');
@@ -444,20 +392,29 @@ const DiscussionContainer: React.FC = () => {
       )}
 
       {report && (
-        <Box>
-          <ReportPoints
-            points={report.points}
-            onPointSelect={handlePointSelect}
-            selectedPointId={state.point_selection?.point_id}
-            investigatedPoints={investigatedPoints}
-            loading={loading}
-            loadingPoints={loadingPoints}
-            level={0}
-            topic={report.topic}
-            pointPath={[]}
-            parentTitle={undefined}
-          />
-        </Box>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <ReportPoints
+              points={report.points}
+              onPointSelect={handlePointSelect}
+              onExtractPoints={handleExtractPoints}
+              selectedPointId={state.point_selection?.point_id}
+              investigatedPoints={investigatedPoints}
+              loading={loading}
+              loadingPoints={loadingPoints}
+              level={0}
+              topic={report.topic}
+              pointPath={[]}
+              parentTitle={undefined}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <CriticPoints
+              points={criticPoints}
+              loading={loadingCritic}
+            />
+          </Grid>
+        </Grid>
       )}
     </Box>
   );

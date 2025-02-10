@@ -8,6 +8,7 @@ import { Point } from '../types/report';
 interface ReportPointsProps {
   points: Point[];
   onPointSelect: (pointId: string) => void;
+  onExtractPoints?: (point: { title: string; content: string }) => void;
   selectedPointId?: string;
   investigatedPoints: Set<string>;
   loading?: boolean;
@@ -38,6 +39,7 @@ const DEBUG = true; // デバッグモードフラグ
 export const ReportPoints: React.FC<ReportPointsProps> = ({
   points,
   onPointSelect,
+  onExtractPoints,
   selectedPointId,
   investigatedPoints,
   loading = false,
@@ -119,26 +121,6 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
 
   const handlePointSelect = (pointId: string) => {
     const fullId = getFullId(pointId);
-    if (DEBUG) {
-      console.group('Point Selection Debug');
-      console.log('Selected Point ID:', pointId);
-      console.log('Full ID:', fullId);
-      console.log('Is Investigated:', isInvestigated(pointId));
-      console.log('Current Level:', level);
-      
-      // 選択されたポイントの詳細情報を表示
-      const selectedPoint = points.find(p => p.id === pointId);
-      console.log('Selected Point Details:', {
-        title: selectedPoint?.title,
-        content: selectedPoint?.content,
-        source: selectedPoint?.source,
-        detailedReport: selectedPoint?.detailedReport,
-        report_id: selectedPoint?.report_id
-      });
-      
-      console.groupEnd();
-    }
-
     if (isInvestigated(pointId)) {
       if (isExpanded(pointId)) {
         setExpandedPoint(null);
@@ -154,22 +136,6 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
         }
       }
     } else {
-      // 新しいデバッグログを追加
-      if (DEBUG) {
-        console.group('Calling Backend Debug');
-        console.log('Calling onPointSelect with:', {
-          fullId,
-          level,
-          parentPointId,
-          pointId,
-          currentState: {
-            points,
-            investigatedPoints: Array.from(investigatedPoints),
-            expandedPoint
-          }
-        });
-        console.groupEnd();
-      }
       onPointSelect(fullId);
     }
   };
@@ -200,20 +166,8 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
     );
   };
 
-  // デバッグ用のログ出力
+  // 親コンポーネントからの更新時に展開状態をリセット
   React.useEffect(() => {
-    if (DEBUG) {
-      console.group(`ReportPoints Level ${level}`);
-      console.log('Current Level:', level);
-      console.log('Parent ID:', parentPointId);
-      console.log('Point Path:', pointPath);
-      console.log('Points:', points);
-      console.log('Investigated Points:', Array.from(investigatedPoints));
-      console.log('Expanded Point:', expandedPoint);
-      console.groupEnd();
-    }
-
-    // 親コンポーネントからの更新時に展開状態をリセット
     if (expandedPoint) {
       const currentPoint = points.find(p => p.id === expandedPoint.pointId);
       if (!currentPoint?.detailedReport) {
@@ -226,34 +180,8 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
   const renderExpandedPoint = () => {
     if (!expandedPoint) return null;
 
-    // 完全なIDを使用してポイントを検索
     const [_, __, pointId] = expandedPoint.fullId.split('_');
     const expandedPointData = points.find(p => p.id === pointId);
-    
-    if (DEBUG) {
-      console.group('Expanded Point Debug');
-      console.log('Full ID:', expandedPoint.fullId);
-      console.log('Point ID:', pointId);
-      console.log('Found Point:', expandedPointData);
-      console.log('Detailed Report:', expandedPointData?.detailedReport);
-      console.log('Current Path:', getCurrentPath(pointId));
-      
-      // 展開されたポイントの詳細情報を表示
-      if (expandedPointData) {
-        console.log('Expanded Point Details:', {
-          title: expandedPointData.title,
-          content: expandedPointData.content,
-          source: expandedPointData.source,
-          childPoints: expandedPointData.detailedReport?.points?.map(p => ({
-            id: p.id,
-            title: p.title,
-            content: p.content
-          }))
-        });
-      }
-      
-      console.groupEnd();
-    }
 
     if (!expandedPointData?.detailedReport) return null;
 
@@ -264,6 +192,7 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
       <ReportPoints
         points={expandedPointData.detailedReport.points}
         onPointSelect={onPointSelect}
+        onExtractPoints={onExtractPoints}
         selectedPointId={selectedPointId}
         investigatedPoints={investigatedPoints}
         loading={loading}
@@ -316,9 +245,19 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
               }}
             >
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  {point.title}
-                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                  <Typography variant="h6">
+                    {point.title}
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => onExtractPoints?.({ title: point.title, content: point.content })}
+                    sx={{ ml: 2 }}
+                  >
+                    論点抽出へ
+                  </Button>
+                </Box>
                 <Typography variant="body1" paragraph>
                   {point.content}
                 </Typography>
