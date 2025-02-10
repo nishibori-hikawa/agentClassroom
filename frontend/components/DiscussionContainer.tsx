@@ -571,11 +571,11 @@ const DiscussionContainer: React.FC = () => {
                 {investigationReport && (
                   <ReportPoints
                     points={investigationReport.points}
-                    onPointSelect={() => {}}
-                    selectedPointId=""
-                    investigatedPoints={new Set()}
+                    onPointSelect={handlePointSelect}
+                    selectedPointId={state.point_selection_for_critic?.point_id}
+                    investigatedPoints={investigatedPoints}
                     loading={false}
-                    loadingPoints={new Set()}
+                    loadingPoints={loadingPoints}
                     level={0}
                     topic={investigationReport.topic}
                     pointPath={[]}
