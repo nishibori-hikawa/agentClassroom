@@ -1,10 +1,36 @@
 import React, { useState } from 'react';
-import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Alert, Grid } from '@mui/material';
+import { Box, CircularProgress, Button, TextField, Typography, Card, CardContent, Alert, Grid, Tabs, Tab } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ClearIcon from '@mui/icons-material/Clear';
 import { ReportPoints } from './ReportPoints';
 import { CriticPoints } from './CriticPoints';
 import { ReportContent, Point } from '../types/report';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ py: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
 
 interface State {
   query: string;
@@ -22,6 +48,7 @@ interface State {
 }
 
 const DiscussionContainer: React.FC = () => {
+  const [currentTab, setCurrentTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingPoints, setLoadingPoints] = useState<Set<string>>(new Set());
   const [state, setState] = useState<State>({ query: '' });
@@ -32,6 +59,10 @@ const DiscussionContainer: React.FC = () => {
   const [criticPoints, setCriticPoints] = useState<Array<{ title: string; content: string }> | null>(null);
   const [loadingCriticPoints, setLoadingCriticPoints] = useState<Set<string>>(new Set());
   const [extractedPoints, setExtractedPoints] = useState<Set<string>>(new Set());
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setCurrentTab(newValue);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -347,6 +378,10 @@ const DiscussionContainer: React.FC = () => {
     }
   };
 
+  const handleViewCriticPoints = () => {
+    setCurrentTab(1);
+  };
+
   const parseReportContent = (text: string, reportId: string, topic: string): ReportContent => {
     const lines = text.split('\n');
     const points: Point[] = [];
@@ -417,49 +452,60 @@ const DiscussionContainer: React.FC = () => {
           </CardContent>
         </Card>
       ) : (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button
-            variant="outlined"
-            onClick={handleNewQuestion}
-            startIcon={<ClearIcon />}
-          >
-            調査をクリア
-          </Button>
-        </Box>
-      )}
+        <>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={handleNewQuestion}
+              startIcon={<ClearIcon />}
+            >
+              探究をクリア
+            </Button>
+          </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
 
-      {report && (
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
-            <ReportPoints
-              points={report.points}
-              onPointSelect={handlePointSelect}
-              onExtractPoints={handleExtractPoints}
-              selectedPointId={state.point_selection_for_critic?.point_id}
-              investigatedPoints={investigatedPoints}
-              loading={loading}
-              loadingPoints={loadingPoints}
-              level={0}
-              topic={report.topic}
-              pointPath={[]}
-              parentTitle={undefined}
-              loadingCriticPoints={loadingCriticPoints}
-              extractedPoints={extractedPoints}
-            />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <CriticPoints
-              points={criticPoints}
-              loading={false}
-            />
-          </Grid>
-        </Grid>
+          {report && (
+            <>
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+                <Tabs value={currentTab} onChange={handleTabChange} aria-label="discussion tabs">
+                  <Tab label="レポート" />
+                  <Tab label="論点" />
+                </Tabs>
+              </Box>
+
+              <TabPanel value={currentTab} index={0}>
+                <ReportPoints
+                  points={report.points}
+                  onPointSelect={handlePointSelect}
+                  onExtractPoints={handleExtractPoints}
+                  selectedPointId={state.point_selection_for_critic?.point_id}
+                  investigatedPoints={investigatedPoints}
+                  loading={loading}
+                  loadingPoints={loadingPoints}
+                  level={0}
+                  topic={report.topic}
+                  pointPath={[]}
+                  parentTitle={undefined}
+                  loadingCriticPoints={loadingCriticPoints}
+                  extractedPoints={extractedPoints}
+                  onViewCriticPoints={handleViewCriticPoints}
+                />
+              </TabPanel>
+
+              <TabPanel value={currentTab} index={1}>
+                <CriticPoints
+                  points={criticPoints}
+                  loading={false}
+                />
+              </TabPanel>
+            </>
+          )}
+        </>
       )}
     </Box>
   );

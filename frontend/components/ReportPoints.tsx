@@ -21,6 +21,7 @@ interface ReportPointsProps {
   parentTitle?: string;
   onBack?: () => void;
   extractedPoints?: Set<string>;
+  onViewCriticPoints?: () => void;
 }
 
 interface ExpandedPoint {
@@ -53,7 +54,8 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
   topic,
   parentTitle,
   onBack,
-  extractedPoints = new Set()
+  extractedPoints = new Set(),
+  onViewCriticPoints
 }) => {
   const POINTS_PER_PAGE = 3;
   const [page, setPage] = useState(1);
@@ -209,6 +211,7 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
         parentTitle={expandedPointData.title}
         onBack={handleBack}
         extractedPoints={extractedPoints}
+        onViewCriticPoints={onViewCriticPoints}
       />
     );
   };
@@ -255,32 +258,45 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
                   <Typography variant="h6">
                     {point.title}
                   </Typography>
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    size="small"
-                    onClick={() => onExtractPoints?.({ 
-                      title: point.title, 
-                      content: point.content,
-                      id: getFullId(point.id)
-                    })}
-                    disabled={loading || loadingCriticPoints.has(getFullId(point.id)) || extractedPoints.has(getFullId(point.id))}
-                    sx={{ 
-                      mt: 1,
-                      position: 'relative',
-                      minWidth: '100px'
-                    }}
-                  >
-                    {loadingCriticPoints.has(getFullId(point.id)) ? (
-                      <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <CircularProgress size={20} color="inherit" />
-                      </Box>
-                    ) : extractedPoints.has(getFullId(point.id)) ? (
-                      '抽出済み'
-                    ) : (
-                      '論点抽出'
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      size="small"
+                      onClick={() => onExtractPoints?.({ 
+                        title: point.title, 
+                        content: point.content,
+                        id: getFullId(point.id)
+                      })}
+                      disabled={loading || loadingCriticPoints.has(getFullId(point.id)) || extractedPoints.has(getFullId(point.id))}
+                      sx={{ 
+                        mt: 1,
+                        position: 'relative',
+                        minWidth: '100px'
+                      }}
+                    >
+                      {loadingCriticPoints.has(getFullId(point.id)) ? (
+                        <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <CircularProgress size={20} color="inherit" />
+                        </Box>
+                      ) : extractedPoints.has(getFullId(point.id)) ? (
+                        '抽出済み 3件'
+                      ) : (
+                        '論点抽出'
+                      )}
+                    </Button>
+                    {extractedPoints.has(getFullId(point.id)) && (
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={() => onViewCriticPoints?.()}
+                        sx={{ mt: 1 }}
+                      >
+                        論点を確認
+                      </Button>
                     )}
-                  </Button>
+                  </Box>
                 </Box>
                 <Typography variant="body1" paragraph>
                   {point.content}
