@@ -60,6 +60,8 @@ const DiscussionContainer: React.FC = () => {
   const [loadingCriticPoints, setLoadingCriticPoints] = useState<Set<string>>(new Set());
   const [extractedPoints, setExtractedPoints] = useState<Set<string>>(new Set());
   const [investigationReport, setInvestigationReport] = useState<ReportContent | null>(null);
+  const [loadingInvestigation, setLoadingInvestigation] = useState<Set<string>>(new Set());
+  const [investigatedCases, setInvestigatedCases] = useState<Set<string>>(new Set());
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
@@ -384,6 +386,8 @@ const DiscussionContainer: React.FC = () => {
   };
 
   const handleInvestigateCase = async (point: { title: string; content: string }, isYesCase: boolean) => {
+    const caseKey = `${point.title}_${isYesCase ? 'yes' : 'no'}`;
+    setLoadingInvestigation(prev => new Set(prev).add(caseKey));
     try {
       const requestPayload = {
         state: {
@@ -421,11 +425,18 @@ const DiscussionContainer: React.FC = () => {
         );
         setInvestigationReport(investigationData);
         setCurrentTab(2); // 調査事例タブに切り替え
+        setInvestigatedCases(prev => new Set(prev).add(caseKey));
       }
 
     } catch (error) {
       console.error('Error:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
+    } finally {
+      setLoadingInvestigation(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(caseKey);
+        return newSet;
+      });
     }
   };
 
@@ -550,6 +561,9 @@ const DiscussionContainer: React.FC = () => {
                   points={criticPoints}
                   loading={false}
                   onInvestigateCase={handleInvestigateCase}
+                  loadingInvestigation={loadingInvestigation}
+                  investigatedCases={investigatedCases}
+                  onViewInvestigation={() => setCurrentTab(2)}
                 />
               </TabPanel>
 

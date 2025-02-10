@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Card, CardContent, Typography, Grid, CircularProgress, Button } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 
 interface CriticPointsProps {
   points: Array<{
@@ -9,9 +10,19 @@ interface CriticPointsProps {
   }> | null;
   loading: boolean;
   onInvestigateCase?: (point: { title: string; content: string }, isYesCase: boolean) => void;
+  loadingInvestigation: Set<string>;
+  investigatedCases: Set<string>;
+  onViewInvestigation?: () => void;
 }
 
-export const CriticPoints: React.FC<CriticPointsProps> = ({ points, loading, onInvestigateCase }) => {
+export const CriticPoints: React.FC<CriticPointsProps> = ({ 
+  points, 
+  loading, 
+  onInvestigateCase,
+  loadingInvestigation,
+  investigatedCases,
+  onViewInvestigation
+}) => {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -32,6 +43,39 @@ export const CriticPoints: React.FC<CriticPointsProps> = ({ points, loading, onI
     );
   }
 
+  const getButtonState = (point: { title: string; content: string }, isYes: boolean) => {
+    const caseKey = `${point.title}_${isYes ? 'yes' : 'no'}`;
+    if (loadingInvestigation.has(caseKey)) {
+      return {
+        content: <CircularProgress size={20} color="inherit" />,
+        disabled: true,
+        onClick: () => {}
+      };
+    }
+    if (investigatedCases.has(caseKey)) {
+      return {
+        content: (
+          <>
+            <FormatListBulletedIcon />
+            調査済み 3件
+          </>
+        ),
+        disabled: false,
+        onClick: () => onViewInvestigation?.()
+      };
+    }
+    return {
+      content: (
+        <>
+          <SearchIcon />
+          {isYes ? 'Yesの事例調査' : 'Noの事例調査'}
+        </>
+      ),
+      disabled: false,
+      onClick: () => onInvestigateCase?.(point, isYes)
+    };
+  };
+
   return (
     <Grid container spacing={2}>
       {points.map((point, index) => (
@@ -46,24 +90,27 @@ export const CriticPoints: React.FC<CriticPointsProps> = ({ points, loading, onI
                   {point.content}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    size="small"
-                    startIcon={<SearchIcon />}
-                    onClick={() => onInvestigateCase?.(point, true)}
-                  >
-                    Yesの事例調査
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    color="secondary"
-                    size="small"
-                    startIcon={<SearchIcon />}
-                    onClick={() => onInvestigateCase?.(point, false)}
-                  >
-                    Noの事例調査
-                  </Button>
+                  {[true, false].map((isYes) => {
+                    const buttonState = getButtonState(point, isYes);
+                    return (
+                      <Button
+                        key={isYes ? 'yes' : 'no'}
+                        variant="outlined"
+                        color={isYes ? "primary" : "secondary"}
+                        size="small"
+                        onClick={buttonState.onClick}
+                        disabled={buttonState.disabled}
+                        sx={{ 
+                          minWidth: '140px',
+                          display: 'flex',
+                          gap: 1,
+                          alignItems: 'center'
+                        }}
+                      >
+                        {buttonState.content}
+                      </Button>
+                    );
+                  })}
                 </Box>
               </Box>
             </CardContent>
