@@ -580,6 +580,7 @@ const DiscussionContainer: React.FC = () => {
                     topic={investigationReport.topic}
                     pointPath={[]}
                     parentTitle=""
+                    onExtractPoints={undefined}
                     loadingCriticPoints={new Set()}
                     extractedPoints={new Set()}
                   />
