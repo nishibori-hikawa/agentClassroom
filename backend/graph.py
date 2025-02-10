@@ -24,9 +24,13 @@ class State(BaseModel):
     current_role: str = Field(default="", description="現在のロール")
     reporter_content: str = Field(default="", description="reporterの初回回答内容")
     report_id: str = Field(default="", description="レポートID")
-    point_selection: PointSelection = Field(default=None, description="ユーザーの要点選択")
+    point_selection_for_critic: PointSelection = Field(
+        default=None, description="ユーザーの要点選択"
+    )
     explored_content: str = Field(default="", description="選択された要点の詳細レポート")
-    topic_selection: PointSelection = Field(default=None, description="ユーザーの最終トピック選択")
+    user_selection_of_critic: PointSelection = Field(
+        default=None, description="ユーザーのcritic論点選択"
+    )
     critic_content: CriticContent = Field(
         default_factory=CriticContent, description="criticの回答内容"
     )
@@ -97,19 +101,19 @@ class AgentClassroom:
             "query": state.query,
             "current_role": "select_point",
             "reporter_content": state.reporter_content,
-            "point_selection": state.point_selection,
+            "point_selection_for_critic": state.point_selection_for_critic,
             "report_id": state.report_id,
         }
 
     def explore_report_node(self, state: State) -> dict[str, Any]:
         """選択された要点について詳細レポートを生成するノード"""
         print(f"\nDebug - Generating detailed report for:")
-        print(f"Report ID: {state.point_selection.report_id}")
-        print(f"Point ID: {state.point_selection.point_id}")
+        print(f"Report ID: {state.point_selection_for_critic.report_id}")
+        print(f"Point ID: {state.point_selection_for_critic.point_id}")
         print(f"Available reports: {list(self.reporter.reports.keys())}")
 
         content = self.reporter.generate_detailed_report(
-            state.point_selection.report_id, state.point_selection.point_id
+            state.point_selection_for_critic.report_id, state.point_selection_for_critic.point_id
         )
         print(f"\nDebug - Generated content length: {len(content)}")
 
@@ -117,7 +121,7 @@ class AgentClassroom:
             "query": state.query,
             "current_role": "explore_report",
             "reporter_content": state.reporter_content,
-            "point_selection": state.point_selection,
+            "point_selection_for_critic": state.point_selection_for_critic,
             "explored_content": content,
             "report_id": state.report_id,
             "thread_id": state.thread_id,
@@ -129,23 +133,33 @@ class AgentClassroom:
             "query": state.query,
             "current_role": "select_topic",
             "reporter_content": state.reporter_content,
-            "point_selection": state.point_selection,
+            "point_selection_for_critic": state.point_selection_for_critic,
             "explored_content": state.explored_content,
-            "topic_selection": state.topic_selection,
+            "user_selection_of_critic": state.user_selection_of_critic,
             "report_id": state.report_id,
         }
 
     def critic_node(self, state: State) -> dict[str, Any]:
         """選択されたトピックに対して論点を生成するノード"""
-        critic_content = self.critic.generate_critique(state.explored_content)
+        if (
+            not state.point_selection_for_critic
+            or not state.point_selection_for_critic.title
+            or not state.point_selection_for_critic.content
+        ):
+            raise ValueError("Point selection with title and content is required for critic node")
+
+        critic_content = self.critic.generate_critique(
+            title=state.point_selection_for_critic.title,
+            content=state.point_selection_for_critic.content,
+        )
 
         return {
             "query": state.query,
             "current_role": "critic",
             "reporter_content": state.reporter_content,
-            "point_selection": state.point_selection,
+            "point_selection_for_critic": state.point_selection_for_critic,
             "explored_content": state.explored_content,
-            "topic_selection": state.topic_selection,
+            "user_selection_of_critic": state.user_selection_of_critic,
             "critic_content": critic_content,
             "report_id": state.report_id,
         }
@@ -184,9 +198,9 @@ def main():
     print("-" * 50)
 
     # ユーザー入力のシミュレート（要点選択）
-    state.point_selection = PointSelection(report_id=state.report_id, point_id="1")
+    state.point_selection_for_critic = PointSelection(report_id=state.report_id, point_id="1")
     print(
-        f"Selected point - Report ID: {state.point_selection.report_id}, Point ID: {state.point_selection.point_id}"
+        f"Selected point - Report ID: {state.point_selection_for_critic.report_id}, Point ID: {state.point_selection_for_critic.point_id}"
     )
 
     # 詳細レポートの生成
@@ -201,7 +215,7 @@ def main():
     print("-" * 50)
 
     # ユーザー入力のシミュレート（トピック選択）
-    state.topic_selection = PointSelection(report_id=state.report_id, point_id="1")
+    state.user_selection_of_critic = PointSelection(report_id=state.report_id, point_id="1")
 
     # 最終的な論点生成
     state = agent.invoke_node("critic", state)

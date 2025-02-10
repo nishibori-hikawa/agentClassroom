@@ -7,7 +7,7 @@ const IndexPage: React.FC = () => {
     <Container maxWidth="xl">
       <Box my={4}>
         <Typography variant="h4" component="h1" gutterBottom>
-          AI Classroom
+          エージェント教室
         </Typography>
         <Grid container spacing={3}>
           <Grid item xs={12} md={4}>
@@ -29,7 +29,7 @@ const IndexPage: React.FC = () => {
                   Critic
                 </Typography>
                 <Typography variant="body2" color="textSecondary" paragraph>
-                  レポートの内容を分析し、重要なポイントを抽出します。
+                  レポートの内容を分析し、重要な論点を抽出します。
                 </Typography>
               </CardContent>
             </Card>
@@ -50,7 +50,7 @@ const IndexPage: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography variant="h5" component="h2" gutterBottom>
-                  Discussion
+                  探究の場
                 </Typography>
                 <DiscussionContainer />
               </CardContent>

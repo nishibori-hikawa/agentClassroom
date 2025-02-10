@@ -8,16 +8,20 @@ import { Point } from '../types/report';
 interface ReportPointsProps {
   points: Point[];
   onPointSelect: (pointId: string) => void;
+  onExtractPoints?: (point: { title: string; content: string; id: string }) => void;
   selectedPointId?: string;
   investigatedPoints: Set<string>;
   loading?: boolean;
   loadingPoints: Set<string>;
+  loadingCriticPoints: Set<string>;
   level?: number;
   parentPointId?: string;
   pointPath?: PointPath[];
   topic?: string;
   parentTitle?: string;
   onBack?: () => void;
+  extractedPoints?: Set<string>;
+  onViewCriticPoints?: () => void;
 }
 
 interface ExpandedPoint {
@@ -38,16 +42,20 @@ const DEBUG = true; // デバッグモードフラグ
 export const ReportPoints: React.FC<ReportPointsProps> = ({
   points,
   onPointSelect,
+  onExtractPoints,
   selectedPointId,
   investigatedPoints,
   loading = false,
   loadingPoints,
+  loadingCriticPoints,
   level = 0,
   parentPointId = 'root',
   pointPath = [],
   topic,
   parentTitle,
-  onBack
+  onBack,
+  extractedPoints = new Set(),
+  onViewCriticPoints
 }) => {
   const POINTS_PER_PAGE = 3;
   const [page, setPage] = useState(1);
@@ -119,26 +127,6 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
 
   const handlePointSelect = (pointId: string) => {
     const fullId = getFullId(pointId);
-    if (DEBUG) {
-      console.group('Point Selection Debug');
-      console.log('Selected Point ID:', pointId);
-      console.log('Full ID:', fullId);
-      console.log('Is Investigated:', isInvestigated(pointId));
-      console.log('Current Level:', level);
-      
-      // 選択されたポイントの詳細情報を表示
-      const selectedPoint = points.find(p => p.id === pointId);
-      console.log('Selected Point Details:', {
-        title: selectedPoint?.title,
-        content: selectedPoint?.content,
-        source: selectedPoint?.source,
-        detailedReport: selectedPoint?.detailedReport,
-        report_id: selectedPoint?.report_id
-      });
-      
-      console.groupEnd();
-    }
-
     if (isInvestigated(pointId)) {
       if (isExpanded(pointId)) {
         setExpandedPoint(null);
@@ -154,22 +142,6 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
         }
       }
     } else {
-      // 新しいデバッグログを追加
-      if (DEBUG) {
-        console.group('Calling Backend Debug');
-        console.log('Calling onPointSelect with:', {
-          fullId,
-          level,
-          parentPointId,
-          pointId,
-          currentState: {
-            points,
-            investigatedPoints: Array.from(investigatedPoints),
-            expandedPoint
-          }
-        });
-        console.groupEnd();
-      }
       onPointSelect(fullId);
     }
   };
@@ -200,20 +172,8 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
     );
   };
 
-  // デバッグ用のログ出力
+  // 親コンポーネントからの更新時に展開状態をリセット
   React.useEffect(() => {
-    if (DEBUG) {
-      console.group(`ReportPoints Level ${level}`);
-      console.log('Current Level:', level);
-      console.log('Parent ID:', parentPointId);
-      console.log('Point Path:', pointPath);
-      console.log('Points:', points);
-      console.log('Investigated Points:', Array.from(investigatedPoints));
-      console.log('Expanded Point:', expandedPoint);
-      console.groupEnd();
-    }
-
-    // 親コンポーネントからの更新時に展開状態をリセット
     if (expandedPoint) {
       const currentPoint = points.find(p => p.id === expandedPoint.pointId);
       if (!currentPoint?.detailedReport) {
@@ -226,34 +186,8 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
   const renderExpandedPoint = () => {
     if (!expandedPoint) return null;
 
-    // 完全なIDを使用してポイントを検索
     const [_, __, pointId] = expandedPoint.fullId.split('_');
     const expandedPointData = points.find(p => p.id === pointId);
-    
-    if (DEBUG) {
-      console.group('Expanded Point Debug');
-      console.log('Full ID:', expandedPoint.fullId);
-      console.log('Point ID:', pointId);
-      console.log('Found Point:', expandedPointData);
-      console.log('Detailed Report:', expandedPointData?.detailedReport);
-      console.log('Current Path:', getCurrentPath(pointId));
-      
-      // 展開されたポイントの詳細情報を表示
-      if (expandedPointData) {
-        console.log('Expanded Point Details:', {
-          title: expandedPointData.title,
-          content: expandedPointData.content,
-          source: expandedPointData.source,
-          childPoints: expandedPointData.detailedReport?.points?.map(p => ({
-            id: p.id,
-            title: p.title,
-            content: p.content
-          }))
-        });
-      }
-      
-      console.groupEnd();
-    }
 
     if (!expandedPointData?.detailedReport) return null;
 
@@ -264,16 +198,20 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
       <ReportPoints
         points={expandedPointData.detailedReport.points}
         onPointSelect={onPointSelect}
+        onExtractPoints={onExtractPoints}
         selectedPointId={selectedPointId}
         investigatedPoints={investigatedPoints}
         loading={loading}
         loadingPoints={loadingPoints}
+        loadingCriticPoints={loadingCriticPoints}
         level={nextLevel}
         parentPointId={nextParentId}
         pointPath={getCurrentPath(pointId)}
         topic={expandedPointData.detailedReport.topic}
         parentTitle={expandedPointData.title}
         onBack={handleBack}
+        extractedPoints={extractedPoints}
+        onViewCriticPoints={onViewCriticPoints}
       />
     );
   };
@@ -316,9 +254,50 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
               }}
             >
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  {point.title}
-                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                  <Typography variant="h6">
+                    {point.title}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      size="small"
+                      onClick={() => onExtractPoints?.({ 
+                        title: point.title, 
+                        content: point.content,
+                        id: getFullId(point.id)
+                      })}
+                      disabled={loading || loadingCriticPoints.has(getFullId(point.id)) || extractedPoints.has(getFullId(point.id))}
+                      sx={{ 
+                        mt: 1,
+                        position: 'relative',
+                        minWidth: '100px'
+                      }}
+                    >
+                      {loadingCriticPoints.has(getFullId(point.id)) ? (
+                        <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <CircularProgress size={20} color="inherit" />
+                        </Box>
+                      ) : extractedPoints.has(getFullId(point.id)) ? (
+                        '抽出済み 3件'
+                      ) : (
+                        '論点抽出'
+                      )}
+                    </Button>
+                    {extractedPoints.has(getFullId(point.id)) && (
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={() => onViewCriticPoints?.()}
+                        sx={{ mt: 1 }}
+                      >
+                        論点を確認
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
                 <Typography variant="body1" paragraph>
                   {point.content}
                 </Typography>

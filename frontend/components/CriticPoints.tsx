@@ -1,27 +1,52 @@
 import React from 'react';
-import { List, ListItem, ListItemText, Box, Typography } from '@mui/material';
+import { Box, Card, CardContent, Typography, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
 
-const CriticPoints: React.FC = () => {
-  const points = [
-    'Point 1: Policy issues and political system challenges',
-    'Point 2: Factors of international conflict and cooperation',
-    'Point 3: Perspectives likely omitted in the report'
-  ];
+interface CriticPointsProps {
+  points: Array<{
+    title: string;
+    content: string;
+  }> | null;
+  loading: boolean;
+}
+
+export const CriticPoints: React.FC<CriticPointsProps> = ({ points, loading }) => {
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!points || points.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography color="text.secondary">
+            論点が抽出されていません
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <Box>
-      <Typography variant="h6" component="h3" gutterBottom>
-        Critic Points
-      </Typography>
-      <List>
-        {points?.map((point, index) => (
-          <ListItem key={index}>
-            <ListItemText primary={point} />
-          </ListItem>
-        ))}
-      </List>
-    </Box>
+    <Card>
+      <CardContent>
+        <Typography variant="h6" component="h3" gutterBottom>
+          抽出された論点
+        </Typography>
+        <List>
+          {points.map((point, index) => (
+            <ListItem key={index}>
+              <ListItemText
+                primary={point.title}
+                secondary={point.content}
+              />
+            </ListItem>
+          ))}
+        </List>
+      </CardContent>
+    </Card>
   );
 };
-
-export default CriticPoints;

@@ -42,7 +42,7 @@ class QueryRequest(BaseModel):
 
 class PointSelectionRequest(BaseModel):
     state: State
-    point_selection: PointSelection
+    point_selection_for_critic: PointSelection
     thread_id: int
 
 
@@ -63,7 +63,7 @@ async def explore(request: PointSelectionRequest) -> State:
     """選択された要点の詳細を生成するエンドポイント"""
     try:
         state = request.state
-        state.point_selection = request.point_selection
+        state.point_selection_for_critic = request.point_selection_for_critic
         result = graph.invoke_node("explore_report", state)
         return result
     except Exception as e:
@@ -73,10 +73,20 @@ async def explore(request: PointSelectionRequest) -> State:
 
 @app.post("/critic")
 async def critic(request: PointSelectionRequest) -> State:
-    """最終的な論点を生成するエンドポイント"""
+    """論点を生成するエンドポイント"""
     try:
         state = request.state
-        state.topic_selection = request.point_selection
+        state.point_selection_for_critic = request.point_selection_for_critic
+        state.user_selection_of_critic = request.point_selection_for_critic
+        print(
+            f"Debug - Critic endpoint: Processing point_id {request.point_selection_for_critic.point_id}"
+        )
+        print(
+            f"Debug - Critic endpoint: Explored content length: {len(state.explored_content) if state.explored_content else 0}"
+        )
+        print(
+            f"Debug - Critic endpoint: First 100 chars of explored content: {state.explored_content[:100] if state.explored_content else 'No content'}"
+        )
         result = graph.invoke_node("critic", state)
         return result
     except Exception as e:
