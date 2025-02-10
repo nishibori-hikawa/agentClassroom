@@ -3,12 +3,11 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-from graph import AgentClassroom, State
+from graph import AgentClassroom, State, PointSelection
 from retrievers import create_tavily_search_api_retriever
 
 load_dotenv()
@@ -16,81 +15,73 @@ load_dotenv()
 app = FastAPI(
     title="LangChain Server",
     version="1.0",
-    description="LangchainのRunnableインターフェースを使ったシンプルなAPIサーバー",
+    description="Agent Classroom API Server",
 )
 
-# CORSミドルウェアの設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # フロントエンドのオリジン
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# GPT-4-turboモデルを使用
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0,
 )
 
-# 検索結果を制限したリトリーバーを作成
 retriever = create_tavily_search_api_retriever()
-
 graph = AgentClassroom(llm, retriever)
 
 
-class GraphRequest(BaseModel):
-    first_call: bool
-    state: State
+class QueryRequest(BaseModel):
+    query: str
     thread_id: int
 
 
-@app.post("/graph")
-async def invoke(request: GraphRequest) -> State:
-    state = request.state
-    config = {"configurable": {"thread_id": request.thread_id}}
+class PointSelectionRequest(BaseModel):
+    state: State
+    point_selection: PointSelection
+    thread_id: int
+
+
+@app.post("/reporter")
+async def reporter(request: QueryRequest) -> State:
+    """初回の要点を生成するエンドポイント"""
     try:
-        if request.first_call:
-            result = graph.graph.invoke(state.model_dump(), config)
-        else:
-            graph.graph.update_state(values=state.model_dump(), config=config)
-            result = graph.graph.invoke(None, config)
+        initial_state = State(query=request.query, thread_id=str(request.thread_id))
+        result = graph.invoke_node("reporter", initial_state)
         return result
     except Exception as e:
-        logging.error(f"Error invoking graph: {e}")
+        logging.error(f"Error in reporter node: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def event_stream(request: GraphRequest):
-    state = request.state
-    config = {"configurable": {"thread_id": request.thread_id}}
+@app.post("/explore")
+async def explore(request: PointSelectionRequest) -> State:
+    """選択された要点の詳細を生成するエンドポイント"""
     try:
-        if request.first_call:
-            async for event in graph.graph.astream_events(state.model_dump(), config, version="v1"):
-                chunk = event.get("data", {}).get("chunk", {})
-                try:
-                    state = State(**chunk)
-                    yield f"{state.model_dump_json()}\n\n"
-                except Exception as e:
-                    continue
-        else:
-            graph.graph.update_state(values=state.model_dump(), config=config)
-            async for event in graph.graph.astream_events(None, config, version="v1"):
-                chunk = event.get("data", {}).get("chunk", {})
-                try:
-                    state = State(**chunk)
-                    yield f"{state.model_dump_json()}\n\n"
-                except Exception as e:
-                    continue
+        state = request.state
+        state.point_selection = request.point_selection
+        result = graph.invoke_node("explore_report", state)
+        return result
     except Exception as e:
-        logging.error(f"Error invoking graph: {e}")
-        yield f"event: error\ndata: {str(e)}\n\n"
+        logging.error(f"Error in explore node: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/stream")
-async def stream(request: GraphRequest) -> StreamingResponse:
-    return StreamingResponse(event_stream(request=request), media_type="text/event-stream")
+@app.post("/critic")
+async def critic(request: PointSelectionRequest) -> State:
+    """最終的な論点を生成するエンドポイント"""
+    try:
+        state = request.state
+        state.topic_selection = request.point_selection
+        result = graph.invoke_node("critic", state)
+        return result
+    except Exception as e:
+        logging.error(f"Error in critic node: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, List, TypedDict
+from typing import TYPE_CHECKING, List, TypedDict, Optional, Annotated
+from typing_extensions import TypeVar
 import json
 
 from dotenv import load_dotenv
@@ -11,8 +12,14 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+from datetime import datetime
 
-from templates import CHECK_CASES_TEMPLATE, CRITIQUE_TEMPLATE, GENERATE_REPORT_TEMPLATE
+from templates import (
+    CHECK_CASES_TEMPLATE,
+    CRITIQUE_TEMPLATE,
+    GENERATE_REPORT_TEMPLATE,
+    GENERATE_DETAILED_REPORT_TEMPLATE,
+)
 from retrievers import create_news_retriever, create_general_retriever
 
 if TYPE_CHECKING:
@@ -24,15 +31,33 @@ class Source(BaseModel):
     url: str
 
 
+class ReportContent(BaseModel):
+    id: str
+    topic: str
+    points: list["ReporterPoint"] = Field(default_factory=list)
+    thread_id: Optional[str] = None
+
+
+class Thread(BaseModel):
+    id: str
+    report: Optional[ReportContent] = None
+
+
 class ReporterPoint(BaseModel):
     id: str
+    title: str
     content: str
     source: Source
+    report_id: str
+    detailed_report: Optional[ReportContent] = None
 
 
-class ReportContent(BaseModel):
-    topic: str
-    points: list[ReporterPoint] = Field(default_factory=list)
+class PointSelection(BaseModel):
+    """ユーザーによるポイント選択を表すモデル"""
+
+    report_id: str
+    point_id: str
+    selected_at: str = Field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S"))
 
 
 class ReporterAgent:
@@ -40,8 +65,22 @@ class ReporterAgent:
         self.llm = llm
         self.news_retriever = create_news_retriever()
         self.general_retriever = create_general_retriever()
+        self.reports: dict[str, ReportContent] = {}  # レポートを保持するための辞書
 
-    async def generate_report_stream(self, query: str) -> AsyncGenerator[str, None]:
+    def select_point(self, report_id: str, point_id: str) -> PointSelection:
+        """レポートから特定のポイントを選択する"""
+        if report_id not in self.reports:
+            raise ValueError(f"Report with ID {report_id} not found")
+
+        report = self.reports[report_id]
+        # 指定されたpoint_idが存在するか確認
+        if not any(point.id == point_id for point in report.points):
+            raise ValueError(f"Point with ID {point_id} not found in report {report_id}")
+
+        return PointSelection(report_id=report_id, point_id=point_id)
+
+    def generate_report(self, query: str) -> str:
+        """非ストリーミングバージョンのレポート生成メソッド"""
         # Create the prompt
         prompt = PromptTemplate(
             template=GENERATE_REPORT_TEMPLATE,
@@ -49,34 +88,54 @@ class ReporterAgent:
         )
         model = self.llm
 
-        # First get the context using news retriever
+        # Get the context using news retriever
         try:
-            context = await self.news_retriever.ainvoke(query)
+            context = self.news_retriever.invoke(query)
             if not context:
                 context = [{"page_content": "No relevant information found.", "metadata": {}}]
         except Exception as e:
             context = [{"page_content": "Error retrieving information.", "metadata": {}}]
 
-        # Format the prompt first
-        formatted_prompt = prompt.format(context=context, question=query)
+        # Create and execute the chain
+        chain = prompt | model | StrOutputParser()
+        return chain.invoke({"context": context, "question": query})
 
-        # Create the chain for streaming
-        chain = (model | StrOutputParser()).with_config({"tags": ["reporter_stream"]})
+    def generate_detailed_report(self, report_id: str, point_id: str) -> str:
+        """非ストリーミングバージョンの詳細レポート生成メソッド"""
+        # レポートとポイントの取得
+        if report_id not in self.reports:
+            raise ValueError(f"Report with ID {report_id} not found")
 
+        report = self.reports[report_id]
+        point = next((p for p in report.points if p.id == point_id), None)
+        if not point:
+            raise ValueError(f"Point with ID {point_id} not found in report {report_id}")
+
+        # プロンプトの作成
+        prompt = PromptTemplate(
+            template=GENERATE_DETAILED_REPORT_TEMPLATE,
+            input_variables=["context", "title", "content"],
+        )
+        model = self.llm
+
+        # コンテキストの取得
+        search_query = point.title  # タイトルのみを検索クエリとして使用
         try:
-            async for chunk in chain.astream_events(
-                formatted_prompt,
-                version="v1",
-            ):
-                if (
-                    chunk["event"] == "on_chat_model_stream"
-                    and chunk.get("data", {}).get("chunk", {}).content
-                ):
-                    content = chunk["data"]["chunk"].content
-                    yield content
-
+            context = self.news_retriever.invoke(search_query)
+            if not context:
+                context = [{"page_content": "No relevant information found.", "metadata": {}}]
         except Exception as e:
-            yield f"Error during streaming: {str(e)}"
+            context = [{"page_content": "Error retrieving information.", "metadata": {}}]
+
+        # Create and execute the chain
+        chain = prompt | model | StrOutputParser()
+        return chain.invoke(
+            {
+                "context": context,
+                "title": point.title,
+                "content": point.content,
+            }
+        )
 
     def check_cases(self, case: str) -> str:
         prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])
@@ -93,39 +152,73 @@ class ReporterAgent:
         chain: Runnable = prompt | model | StrOutputParser()
         return chain.invoke({"context": content, "case": case})
 
-    async def check_cases_stream(self, case: str) -> AsyncGenerator[str, None]:
-        prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])
-        model = self.llm
+    def parse_report_output(self, text: str, query: str) -> ReportContent:
+        """Parse the reporter's markdown output into a structured format."""
+        lines = text.strip().split("\n")
+        points = []
+        current_point = None
 
-        # First get the context
-        try:
-            content = await self.retriever.ainvoke(case)
-            if not content:
-                content = [
-                    {"page_content": "No relevant information found for this case.", "metadata": {}}
-                ]
-        except Exception as e:
-            content = [{"page_content": f"Error retrieving information: {str(e)}", "metadata": {}}]
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
 
-        # Format the prompt first
-        formatted_prompt = prompt.format(context=content, case=case)
+            if line.startswith("1.") or line.startswith("2.") or line.startswith("3."):
+                # 前のポイントがあれば追加
+                if current_point:
+                    points.append(
+                        ReporterPoint(
+                            id=current_point["id"],
+                            title=current_point["title"],
+                            content=current_point["content"].strip(),
+                            source=current_point["source"],
+                            report_id=current_point["report_id"],
+                            detailed_report=current_point["detailed_report"],
+                        )
+                    )
+                # 新しいポイントの開始
+                title = line.split("**")[1].strip("*[] ")
+                current_point = {
+                    "id": str(len(points) + 1),
+                    "title": title,
+                    "content": "",
+                    "source": None,
+                    "report_id": "",
+                    "detailed_report": None,
+                }
+            elif current_point and "[出典:" in line:
+                # Extract source information
+                source_parts = line.strip("[]").split("](")
+                name = source_parts[0].replace("出典:", "").strip()
+                url = source_parts[1].strip(")")
+                current_point["source"] = Source(name=name, url=url)
+            elif current_point:
+                # Accumulate content lines
+                current_point["content"] += line + " "
 
-        # Create the chain for streaming
-        chain = (model | StrOutputParser()).with_config({"tags": ["check_cases_stream"]})
+        # 最後のポイントを追加
+        if current_point:
+            points.append(
+                ReporterPoint(
+                    id=current_point["id"],
+                    title=current_point["title"],
+                    content=current_point["content"].strip(),
+                    source=current_point["source"],
+                    report_id=current_point["report_id"],
+                    detailed_report=current_point["detailed_report"],
+                )
+            )
 
-        try:
-            async for chunk in chain.astream_events(
-                formatted_prompt,
-                version="v1",
-            ):
-                if (
-                    chunk["event"] == "on_chat_model_stream"
-                    and chunk.get("data", {}).get("chunk", {}).content
-                ):
-                    content = chunk["data"]["chunk"].content
-                    yield content
-        except Exception as e:
-            yield f"Error during streaming: {str(e)}"
+        # Generate a unique ID for the report using timestamp
+        from datetime import datetime
+
+        report_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_content = ReportContent(id=report_id, topic=query, points=points)
+
+        # レポートを保存
+        self.reports[report_id] = report_content
+
+        return report_content
 
 
 class CriticPoint(BaseModel):
@@ -155,8 +248,75 @@ class CriticAgent:
         return chain.invoke({"report_text": report_text})
 
 
+async def test_hierarchical_structure():
+    print("\nTesting hierarchical data structure:")
+    print("-" * 50)
+
+    # Initialize reporter
+    reporter = ReporterAgent(llm)
+
+    # 1. Create initial thread
+    thread = Thread(id="thread_1")
+    print(f"Created thread with ID: {thread.id}")
+
+    # 2. Generate initial report
+    query = "日米首脳会談"
+    report_text = reporter.generate_report(query)
+    initial_report = reporter.parse_report_output(report_text, query)
+    initial_report.thread_id = thread.id
+    thread.report = initial_report
+    print(f"\nCreated initial report:")
+    print(f"Report ID: {initial_report.id}")
+    print(f"Topic: {initial_report.topic}")
+    print(f"Number of points: {len(initial_report.points)}")
+
+    # 3. Select a point and generate detailed report
+    if initial_report.points:
+        point = initial_report.points[0]
+        detailed_report_text = reporter.generate_detailed_report(initial_report.id, point.id)
+        detailed_report = reporter.parse_report_output(detailed_report_text, point.title)
+        point.detailed_report = detailed_report
+        print(f"\nCreated detailed report for point {point.id}:")
+        print(f"Detailed Report ID: {detailed_report.id}")
+        print(f"Topic: {detailed_report.topic}")
+        print(f"Number of sub-points: {len(detailed_report.points)}")
+
+        # 4. Test nested structure by generating another level
+        if detailed_report.points:
+            nested_point = detailed_report.points[0]
+            nested_report_text = reporter.generate_detailed_report(
+                detailed_report.id, nested_point.id
+            )
+            nested_report = reporter.parse_report_output(nested_report_text, nested_point.title)
+            nested_point.detailed_report = nested_report
+            print(f"\nCreated nested report for point {nested_point.id}:")
+            print(f"Nested Report ID: {nested_report.id}")
+            print(f"Topic: {nested_report.topic}")
+            print(f"Number of sub-points: {len(nested_report.points)}")
+
+    # 5. Verify the complete structure
+    print("\nVerifying complete structure:")
+    print(f"Thread ID: {thread.id}")
+    if thread.report:
+        print(f"├── Report: {thread.report.id}")
+        for point in thread.report.points:
+            print(f"│   ├── Point: {point.id} - {point.title}")
+            if point.detailed_report:
+                print(f"│   │   ├── Detailed Report: {point.detailed_report.id}")
+                for sub_point in point.detailed_report.points:
+                    print(f"│   │   │   ├── Sub-Point: {sub_point.id} - {sub_point.title}")
+                    if sub_point.detailed_report:
+                        print(f"│   │   │   │   ├── Nested Report: {sub_point.detailed_report.id}")
+                        for nested_point in sub_point.detailed_report.points:
+                            print(
+                                f"│   │   │   │   │   ├── Nested Point: {nested_point.id} - {nested_point.title}"
+                            )
+
+
 if __name__ == "__main__":
     import asyncio
+    from pprint import pprint
+    from datetime import datetime
 
     load_dotenv()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -165,10 +325,49 @@ if __name__ == "__main__":
         reporter = ReporterAgent(llm)
         query = "ウクライナ戦争が国際秩序に与える影響について"
         print(f"\nTesting reporter with query: {query}\n")
-        print("Streaming output:")
-        async for chunk in reporter.generate_report_stream(query):
-            print(chunk, end="", flush=True)
-        print("\n\nTest completed.")
 
-    # Run the test
+        # 非ストリーミングバージョンのテスト
+        print("Testing non-streaming report generation:")
+        print("-" * 50)
+        report_text = reporter.generate_report(query)
+        print(report_text)
+        print("-" * 50)
+
+        # レポートの解析テスト
+        print("\nParsing the non-streaming output:")
+        report_content = reporter.parse_report_output(report_text, query)
+        print(f"Report ID: {report_content.id}")
+        print(f"Topic: {report_content.topic}")
+        print("\nPoints:")
+        for point in report_content.points:
+            print(f"\nPoint ID: {point.id}")
+            print(f"Title: {point.title}")
+            print(f"Content: {point.content}")
+            if point.source:
+                print(f"Source: {point.source.name} ({point.source.url})")
+            print("-" * 50)
+
+        try:
+            print("\nTesting point selection:")
+            selection = reporter.select_point(report_content.id, "1")
+            print(f"Selected point - Report ID: {selection.report_id}")
+            print(f"Point ID: {selection.point_id}")
+            print(f"Selected at: {selection.selected_at}")
+
+            # 詳細レポートの非ストリーミング生成テスト
+            print("\nGenerating detailed report (non-streaming) for selected point:")
+            print("-" * 50)
+            detailed_report = reporter.generate_detailed_report(
+                selection.report_id, selection.point_id
+            )
+            print(detailed_report)
+            print("-" * 50)
+
+        except ValueError as e:
+            print(f"Error: {e}")
+
+        print("\nTest completed.")
+
+    # Run both tests
     asyncio.run(test_reporter())
+    asyncio.run(test_hierarchical_structure())
