@@ -11,9 +11,11 @@ interface State {
   current_role?: string;
   reporter_content?: string;
   explored_content?: string;
-  point_selection?: {
+  point_selection_for_critic?: {
     report_id: string;
     point_id: string;
+    title?: string;
+    content?: string;
   };
   thread_id?: string;
   report_id?: string;
@@ -28,7 +30,8 @@ const DiscussionContainer: React.FC = () => {
   const [investigatedPoints, setInvestigatedPoints] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(true);
   const [criticPoints, setCriticPoints] = useState<Array<{ title: string; content: string }> | null>(null);
-  const [loadingCritic, setLoadingCritic] = useState(false);
+  const [loadingCriticPoints, setLoadingCriticPoints] = useState<Set<string>>(new Set());
+  const [extractedPoints, setExtractedPoints] = useState<Set<string>>(new Set());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +79,9 @@ const DiscussionContainer: React.FC = () => {
     setState({ query: '' });
     setError(null);
     setInvestigatedPoints(new Set());
+    setExtractedPoints(new Set());
+    setLoadingCriticPoints(new Set());
+    setCriticPoints(null);
   };
 
   const updateReportPoints = (
@@ -201,7 +207,7 @@ const DiscussionContainer: React.FC = () => {
           reporter_content: selectedPoint.content,
           report_id: state.report_id
         },
-        point_selection: {
+        point_selection_for_critic: {
           report_id: state.report_id,
           point_id: pointId
         },
@@ -275,17 +281,41 @@ const DiscussionContainer: React.FC = () => {
     }
   };
 
-  const handleExtractPoints = async (point: { title: string; content: string }) => {
-    setLoadingCritic(true);
+  const handleExtractPoints = async (point: { title: string; content: string; id?: string }) => {
+    if (!point.id) return;
+    setLoadingCriticPoints(prev => new Set(prev).add(point.id!));
     try {
+      const requestPayload = {
+        state: {
+          query: state.query,
+          current_role: state.current_role,
+          reporter_content: state.reporter_content,
+          explored_content: state.explored_content,
+          report_id: state.report_id
+        },
+        point_selection_for_critic: {
+          report_id: state.report_id,
+          point_id: point.id,
+          title: point.title,
+          content: point.content
+        },
+        thread_id: 1,
+        title: point.title,
+        content: point.content
+      };
+      
+      console.log('Debug - Critic request payload:', {
+        ...requestPayload,
+        state: {
+          ...requestPayload.state,
+          explored_content_length: requestPayload.state.explored_content?.length || 0
+        }
+      });
+
       const response = await fetch('http://localhost:8000/critic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: point.title,
-          content: point.content,
-          thread_id: 1
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       if (!response.ok) {
@@ -293,14 +323,23 @@ const DiscussionContainer: React.FC = () => {
       }
 
       const data = await response.json();
-      if (data.critic_points) {
-        setCriticPoints(data.critic_points);
+      if (data.critic_content?.critic_points) {
+        const formattedPoints = data.critic_content.critic_points.map((point: any) => ({
+          title: point.title,
+          content: point.content
+        }));
+        setCriticPoints(formattedPoints);
+        setExtractedPoints(prev => new Set(prev).add(point.id!));
       }
     } catch (error) {
       console.error('Error:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
-      setLoadingCritic(false);
+      setLoadingCriticPoints(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(point.id!);
+        return newSet;
+      });
     }
   };
 
@@ -368,7 +407,7 @@ const DiscussionContainer: React.FC = () => {
                 disabled={loading || !state.query.trim()}
                 sx={{ minWidth: '120px' }}
               >
-                {loading ? <CircularProgress size={24} /> : '質問する'}
+                {loading ? <CircularProgress size={24} /> : '調査を開始'}
               </Button>
             </form>
           </CardContent>
@@ -398,7 +437,7 @@ const DiscussionContainer: React.FC = () => {
               points={report.points}
               onPointSelect={handlePointSelect}
               onExtractPoints={handleExtractPoints}
-              selectedPointId={state.point_selection?.point_id}
+              selectedPointId={state.point_selection_for_critic?.point_id}
               investigatedPoints={investigatedPoints}
               loading={loading}
               loadingPoints={loadingPoints}
@@ -406,12 +445,14 @@ const DiscussionContainer: React.FC = () => {
               topic={report.topic}
               pointPath={[]}
               parentTitle={undefined}
+              loadingCriticPoints={loadingCriticPoints}
+              extractedPoints={extractedPoints}
             />
           </Grid>
           <Grid item xs={12} md={4}>
             <CriticPoints
               points={criticPoints}
-              loading={loadingCritic}
+              loading={false}
             />
           </Grid>
         </Grid>

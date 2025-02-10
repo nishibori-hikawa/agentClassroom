@@ -8,17 +8,19 @@ import { Point } from '../types/report';
 interface ReportPointsProps {
   points: Point[];
   onPointSelect: (pointId: string) => void;
-  onExtractPoints?: (point: { title: string; content: string }) => void;
+  onExtractPoints?: (point: { title: string; content: string; id: string }) => void;
   selectedPointId?: string;
   investigatedPoints: Set<string>;
   loading?: boolean;
   loadingPoints: Set<string>;
+  loadingCriticPoints: Set<string>;
   level?: number;
   parentPointId?: string;
   pointPath?: PointPath[];
   topic?: string;
   parentTitle?: string;
   onBack?: () => void;
+  extractedPoints?: Set<string>;
 }
 
 interface ExpandedPoint {
@@ -44,12 +46,14 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
   investigatedPoints,
   loading = false,
   loadingPoints,
+  loadingCriticPoints,
   level = 0,
   parentPointId = 'root',
   pointPath = [],
   topic,
   parentTitle,
-  onBack
+  onBack,
+  extractedPoints = new Set()
 }) => {
   const POINTS_PER_PAGE = 3;
   const [page, setPage] = useState(1);
@@ -197,12 +201,14 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
         investigatedPoints={investigatedPoints}
         loading={loading}
         loadingPoints={loadingPoints}
+        loadingCriticPoints={loadingCriticPoints}
         level={nextLevel}
         parentPointId={nextParentId}
         pointPath={getCurrentPath(pointId)}
         topic={expandedPointData.detailedReport.topic}
         parentTitle={expandedPointData.title}
         onBack={handleBack}
+        extractedPoints={extractedPoints}
       />
     );
   };
@@ -250,12 +256,30 @@ export const ReportPoints: React.FC<ReportPointsProps> = ({
                     {point.title}
                   </Typography>
                   <Button
-                    variant="outlined"
+                    variant="contained"
+                    color="secondary"
                     size="small"
-                    onClick={() => onExtractPoints?.({ title: point.title, content: point.content })}
-                    sx={{ ml: 2 }}
+                    onClick={() => onExtractPoints?.({ 
+                      title: point.title, 
+                      content: point.content,
+                      id: point.id
+                    })}
+                    disabled={loading || loadingCriticPoints.has(point.id) || extractedPoints.has(point.id)}
+                    sx={{ 
+                      mt: 1,
+                      position: 'relative',
+                      minWidth: '100px'
+                    }}
                   >
-                    論点抽出へ
+                    {loadingCriticPoints.has(point.id) ? (
+                      <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <CircularProgress size={20} color="inherit" />
+                      </Box>
+                    ) : extractedPoints.has(point.id) ? (
+                      '抽出済み'
+                    ) : (
+                      '論点抽出'
+                    )}
                   </Button>
                 </Box>
                 <Typography variant="body1" paragraph>

@@ -57,6 +57,8 @@ class PointSelection(BaseModel):
 
     report_id: str
     point_id: str
+    title: Optional[str] = None
+    content: Optional[str] = None
     selected_at: str = Field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S"))
 
 
@@ -223,18 +225,18 @@ class ReporterAgent:
 
 class CriticPoint(BaseModel):
     title: str
-    cases: list[str]
+    content: str
 
 
 class CriticContent(BaseModel):
-    points: list[CriticPoint] = Field(default_factory=list)
+    critic_points: list[CriticPoint] = Field(default_factory=list)
 
 
 class CriticAgent:
     def __init__(self, llm: BaseChatModel) -> None:
         self.llm = llm
 
-    def generate_critique(self, report_text: str) -> dict:
+    def generate_critique(self, title: str, content: str) -> dict:
         parser = PydanticOutputParser(pydantic_object=CriticContent)
         prompt = ChatPromptTemplate.from_template(
             template=CRITIQUE_TEMPLATE,
@@ -245,7 +247,7 @@ class CriticAgent:
         chain = prompt | self.llm | parser
 
         # Execute chain and return result
-        return chain.invoke({"report_text": report_text})
+        return chain.invoke({"title": title, "content": content})
 
 
 async def test_hierarchical_structure():
