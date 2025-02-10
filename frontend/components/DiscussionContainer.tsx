@@ -59,6 +59,9 @@ const DiscussionContainer: React.FC = () => {
   const [criticPoints, setCriticPoints] = useState<Array<{ title: string; content: string }> | null>(null);
   const [loadingCriticPoints, setLoadingCriticPoints] = useState<Set<string>>(new Set());
   const [extractedPoints, setExtractedPoints] = useState<Set<string>>(new Set());
+  const [investigationReport, setInvestigationReport] = useState<ReportContent | null>(null);
+  const [loadingInvestigation, setLoadingInvestigation] = useState<Set<string>>(new Set());
+  const [investigatedCases, setInvestigatedCases] = useState<Set<string>>(new Set());
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
@@ -365,6 +368,18 @@ const DiscussionContainer: React.FC = () => {
         }));
         setCriticPoints(formattedPoints);
         setExtractedPoints(prev => new Set(prev).add(point.id!));
+        // point_selection_for_criticの情報を保存
+        if (state.report_id) {  // report_idが存在する場合のみ更新
+          setState(prev => ({
+            ...prev,
+            point_selection_for_critic: {
+              report_id: state.report_id!,
+              point_id: pointId,
+              title: point.title,
+              content: point.content
+            }
+          }));
+        }
       }
     } catch (error) {
       console.error('Error:', error);
@@ -380,6 +395,108 @@ const DiscussionContainer: React.FC = () => {
 
   const handleViewCriticPoints = () => {
     setCurrentTab(1);
+  };
+
+  const handleInvestigateCase = async (point: { title: string; content: string }, isYesCase: boolean) => {
+    const caseKey = `${point.title}_${isYesCase ? 'yes' : 'no'}`;
+    setLoadingInvestigation(prev => new Set(prev).add(caseKey));
+    try {
+      const requestPayload = {
+        state: {
+          query: state.query,
+          current_role: state.current_role,
+          reporter_content: state.reporter_content,
+          report_id: state.report_id,
+          explored_content: state.explored_content
+        },
+        point_selection_for_critic: {
+          report_id: state.report_id,
+          point_id: state.point_selection_for_critic?.point_id,
+          title: point.title,
+          content: point.content
+        },
+        user_selection_of_critic: {
+          report_id: state.report_id,
+          point_id: state.point_selection_for_critic?.point_id,
+          title: point.title,
+          content: point.content
+        },
+        thread_id: 1,
+        is_yes_case: isYesCase
+      };
+
+      // デバッグログを追加
+      console.log('Debug - handleInvestigateCase - Request Payload:', {
+        ...requestPayload,
+        state: {
+          ...requestPayload.state,
+          query: requestPayload.state.query,
+          current_role: requestPayload.state.current_role,
+          report_id: requestPayload.state.report_id,
+          explored_content_length: requestPayload.state.explored_content?.length || 0
+        },
+        point_selection_for_critic: {
+          ...requestPayload.point_selection_for_critic,
+          report_id: requestPayload.point_selection_for_critic.report_id,
+          point_id: requestPayload.point_selection_for_critic.point_id,
+          title: requestPayload.point_selection_for_critic.title,
+          content: requestPayload.point_selection_for_critic.content?.substring(0, 100) + '...'
+        }
+      });
+
+      const response = await fetch('http://localhost:8000/investigate_case', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestPayload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Debug - handleInvestigateCase - Error Response:', errorData);
+        throw new Error(`API error: ${response.status} - ${JSON.stringify(errorData)}`);
+      }
+
+      const data = await response.json();
+      console.log('Debug - handleInvestigateCase - Success Response:', {
+        explored_content_length: data.explored_content?.length || 0,
+        report_id: data.report_id,
+        explored_content: data.explored_content,
+        raw_data: data
+      });
+
+      if (data.explored_content) {
+        console.log('Debug - Before parseReportContent:', {
+          content: data.explored_content,
+          lines: data.explored_content.split('\n').slice(0, 5)
+        });
+        
+        const investigationData = parseReportContent(
+          data.explored_content,
+          `investigation_${Date.now()}`,
+          `${point.title}の${isYesCase ? 'Yes' : 'No'}事例`
+        );
+        
+        console.log('Debug - After parseReportContent:', {
+          parsedData: investigationData,
+          pointsCount: investigationData.points.length,
+          firstPoint: investigationData.points[0]
+        });
+
+        setInvestigationReport(investigationData);
+        setCurrentTab(2); // 調査事例タブに切り替え
+        setInvestigatedCases(prev => new Set(prev).add(caseKey));
+      }
+
+    } catch (error) {
+      console.error('Debug - handleInvestigateCase - Error:', error);
+      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
+    } finally {
+      setLoadingInvestigation(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(caseKey);
+        return newSet;
+      });
+    }
   };
 
   const parseReportContent = (text: string, reportId: string, topic: string): ReportContent => {
@@ -475,6 +592,7 @@ const DiscussionContainer: React.FC = () => {
                 <Tabs value={currentTab} onChange={handleTabChange} aria-label="discussion tabs">
                   <Tab label="レポート" />
                   <Tab label="論点" />
+                  <Tab label="調査事例" />
                 </Tabs>
               </Box>
 
@@ -501,7 +619,31 @@ const DiscussionContainer: React.FC = () => {
                 <CriticPoints
                   points={criticPoints}
                   loading={false}
+                  onInvestigateCase={handleInvestigateCase}
+                  loadingInvestigation={loadingInvestigation}
+                  investigatedCases={investigatedCases}
+                  onViewInvestigation={() => setCurrentTab(2)}
                 />
+              </TabPanel>
+
+              <TabPanel value={currentTab} index={2}>
+                {investigationReport && (
+                  <ReportPoints
+                    points={investigationReport.points}
+                    onPointSelect={handlePointSelect}
+                    selectedPointId={state.point_selection_for_critic?.point_id}
+                    investigatedPoints={investigatedPoints}
+                    loading={false}
+                    loadingPoints={loadingPoints}
+                    level={0}
+                    topic={investigationReport.topic}
+                    pointPath={[]}
+                    parentTitle=""
+                    onExtractPoints={undefined}
+                    loadingCriticPoints={new Set()}
+                    extractedPoints={new Set()}
+                  />
+                )}
               </TabPanel>
             </>
           )}

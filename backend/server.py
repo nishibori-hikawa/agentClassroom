@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
+from langchain_google_vertexai import ChatVertexAI
 from pydantic import BaseModel, Field
 
 from agent import PointSelection
@@ -25,6 +26,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# llm = ChatVertexAI(
+#     model_name="gemini-1.5-flash",
+# )
+
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0,
@@ -44,6 +49,7 @@ class PointSelectionRequest(BaseModel):
     state: State
     point_selection_for_critic: PointSelection
     thread_id: int
+    is_yes_case: Optional[bool] = None
 
 
 @app.post("/reporter")
@@ -88,6 +94,32 @@ async def critic(request: PointSelectionRequest) -> State:
         return critic_controller.post(state)
     except Exception as e:
         logging.error(f"Error in critic node: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/investigate_case")
+async def investigate_case(request: PointSelectionRequest) -> State:
+    """Yes/Noの事例を調査するエンドポイント"""
+    try:
+        print("\nDebug - Investigate Case Endpoint:")
+        print(f"Request data: {request.dict()}")
+        print(f"State data: {request.state.dict()}")
+        print(f"Point selection: {request.point_selection_for_critic}")
+        print(f"Is Yes Case: {request.is_yes_case}")
+
+        state = request.state
+        state.point_selection_for_critic = request.point_selection_for_critic
+        state.is_yes_case = request.is_yes_case
+
+        print(f"Debug - State after update:")
+        print(f"Point selection: {state.point_selection_for_critic}")
+        print(f"Is Yes Case: {state.is_yes_case}")
+
+        result = graph.invoke_node("investigate_cases", state)
+        return result
+    except Exception as e:
+        logging.error(f"Error in investigate_cases node: {e}")
+        print(f"Debug - Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
