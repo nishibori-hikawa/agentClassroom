@@ -4,11 +4,10 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_openai import ChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 from pydantic import BaseModel
 
-from graph import AgentClassroom, State, PointSelection
+from graph import AgentClassroom, PointSelection, State
 from retrievers import create_tavily_search_api_retriever
 
 load_dotenv()
@@ -27,13 +26,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# llm = ChatVertexAI(
-#     model_name="gemini-1.5-flash",
-# )
-
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0,
+llm = ChatVertexAI(
+    model_name="gemini-1.5-flash",
 )
 
 retriever = create_tavily_search_api_retriever()
