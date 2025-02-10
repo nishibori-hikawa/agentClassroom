@@ -172,27 +172,42 @@ class AgentClassroom:
         print("\nDebug - Investigate Cases Node:")
         print(f"Current state: {state.dict()}")
         print(f"Point selection: {state.point_selection_for_critic}")
+        print(f"User selection: {state.user_selection_of_critic}")
         print(f"Is Yes Case: {state.is_yes_case}")
 
-        if (
-            not state.point_selection_for_critic
-            or not state.point_selection_for_critic.title
-            or not state.point_selection_for_critic.content
-        ):
-            print("Debug - Error: Missing required fields in point_selection_for_critic")
-            print(f"point_selection_for_critic: {state.point_selection_for_critic}")
-            raise ValueError(
-                "Point selection with title and content is required for case investigation"
-            )
+        # 必須フィールドのチェックを修正
+        if not state.point_selection_for_critic:
+            print("Debug - Error: Missing point_selection_for_critic")
+            raise ValueError("Point selection is required for case investigation")
+
+        # titleとcontentがpoint_selection_for_criticにない場合は、
+        # user_selection_of_criticから取得を試みる
+        title = state.point_selection_for_critic.title
+        content = state.point_selection_for_critic.content
+
+        print(f"Debug - Initial title from point_selection: {title}")
+        print(f"Debug - Initial content from point_selection: {content}")
+
+        if not title or not content:
+            print("Debug - Title or content missing from point_selection_for_critic")
+            if state.user_selection_of_critic:
+                print("Debug - Attempting to get from user_selection_of_critic")
+                title = state.user_selection_of_critic.title
+                content = state.user_selection_of_critic.content
+                print(f"Debug - Title from user_selection: {title}")
+                print(f"Debug - Content from user_selection: {content}")
+            else:
+                print(
+                    "Debug - Error: Could not find title and content in either point_selection_for_critic or user_selection_of_critic"
+                )
+                raise ValueError("Title and content are required for case investigation")
 
         yes_or_no = "Yes" if state.is_yes_case else "No"
-        print(
-            f"Debug - Investigating {yes_or_no} case for title: {state.point_selection_for_critic.title}"
-        )
+        print(f"Debug - Investigating {yes_or_no} case for title: {title}")
 
         cases_content = self.reporter.check_cases(
-            title=state.point_selection_for_critic.title,
-            content=state.point_selection_for_critic.content,
+            title=title,
+            content=content,
             yes_or_no=yes_or_no,
         )
 

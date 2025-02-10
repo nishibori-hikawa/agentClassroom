@@ -143,7 +143,7 @@ class ReporterAgent:
         """事例を調査するメソッド"""
         prompt = PromptTemplate(
             template=INVESTIGATE_CASES_TEMPLATE,
-            input_variables=["context", "title", "content", "yes_or_no"]
+            input_variables=["context", "title", "content", "yes_or_no"],
         )
         try:
             search_query = f"{title} {yes_or_no}の事例"
@@ -157,12 +157,9 @@ class ReporterAgent:
 
         model = self.llm
         chain = prompt | model | StrOutputParser()
-        return chain.invoke({
-            "context": context,
-            "title": title,
-            "content": content,
-            "yes_or_no": yes_or_no
-        })
+        return chain.invoke(
+            {"context": context, "title": title, "content": content, "yes_or_no": yes_or_no}
+        )
 
     def parse_report_output(self, text: str, query: str) -> ReportContent:
         """Parse the reporter's markdown output into a structured format."""
