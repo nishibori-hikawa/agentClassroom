@@ -36,9 +36,14 @@ GENERATE_DETAILED_REPORT_TEMPLATE = '''
         - 箇条書き以外の文章（タイトルや前置き）は出力しない
         '''
 
-CHECK_CASES_TEMPLATE = '''
+INVESTIGATE_CASES_TEMPLATE = '''
         あなたは国際政治演習に参加している報告担当の生徒です。
-        以下の資料を元に、{case}の言説をサポートする具体的事例について報告してください。
+        以下の資料を元に、選択された言説をサポートする具体的事例について報告してください。
+
+        選択された言説:
+        論点: {title}
+        詳細: {content}
+        論点に対する回答: {yes_or_no}
 
         資料: """
         {context}

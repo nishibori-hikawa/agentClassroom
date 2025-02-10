@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from enum import Enum
 from pprint import pprint
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Optional
 
 from dotenv import load_dotenv
 from IPython.display import Image, display
@@ -27,7 +27,9 @@ class State(BaseModel):
     point_selection_for_critic: PointSelection = Field(
         default=None, description="ユーザーの要点選択"
     )
-    explored_content: str = Field(default="", description="選択された要点の詳細レポート")
+    explored_content: Optional[str] = Field(
+        default=None, description="選択された要点の詳細レポート"
+    )
     user_selection_of_critic: PointSelection = Field(
         default=None, description="ユーザーのcritic論点選択"
     )
@@ -35,6 +37,7 @@ class State(BaseModel):
         default_factory=CriticContent, description="criticの回答内容"
     )
     thread_id: str = Field(default="", description="スレッドID")
+    is_yes_case: bool = Field(default=False, description="Yesの事例を調査するかどうか")
 
 
 class AgentClassroom:
@@ -163,6 +166,63 @@ class AgentClassroom:
             "critic_content": critic_content,
             "report_id": state.report_id,
         }
+
+    def investigate_cases_node(self, state: State) -> dict[str, Any]:
+        """選択された論点に対してYes/Noの事例を調査するノード"""
+        print("\nDebug - Investigate Cases Node:")
+        print(f"Current state: {state.dict()}")
+        print(f"Point selection: {state.point_selection_for_critic}")
+        print(f"User selection: {state.user_selection_of_critic}")
+        print(f"Is Yes Case: {state.is_yes_case}")
+
+        # 必須フィールドのチェックを修正
+        if not state.point_selection_for_critic:
+            print("Debug - Error: Missing point_selection_for_critic")
+            raise ValueError("Point selection is required for case investigation")
+
+        # titleとcontentがpoint_selection_for_criticにない場合は、
+        # user_selection_of_criticから取得を試みる
+        title = state.point_selection_for_critic.title
+        content = state.point_selection_for_critic.content
+
+        print(f"Debug - Initial title from point_selection: {title}")
+        print(f"Debug - Initial content from point_selection: {content}")
+
+        if not title or not content:
+            print("Debug - Title or content missing from point_selection_for_critic")
+            if state.user_selection_of_critic:
+                print("Debug - Attempting to get from user_selection_of_critic")
+                title = state.user_selection_of_critic.title
+                content = state.user_selection_of_critic.content
+                print(f"Debug - Title from user_selection: {title}")
+                print(f"Debug - Content from user_selection: {content}")
+            else:
+                print(
+                    "Debug - Error: Could not find title and content in either point_selection_for_critic or user_selection_of_critic"
+                )
+                raise ValueError("Title and content are required for case investigation")
+
+        yes_or_no = "Yes" if state.is_yes_case else "No"
+        print(f"Debug - Investigating {yes_or_no} case for title: {title}")
+
+        cases_content = self.reporter.check_cases(
+            title=title,
+            content=content,
+            yes_or_no=yes_or_no,
+        )
+
+        result = {
+            "query": state.query,
+            "current_role": "investigate_cases",
+            "reporter_content": state.reporter_content,
+            "point_selection_for_critic": state.point_selection_for_critic,
+            "explored_content": cases_content,
+            "report_id": state.report_id,
+            "thread_id": state.thread_id,
+            "critic_content": state.critic_content,
+        }
+        print("Debug - Returning result:", result)
+        return result
 
     def show_image(self):
         img_data = Image(self.graph.get_graph().draw_mermaid_png())
