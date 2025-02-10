@@ -27,7 +27,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# llm = ChatVertexAI()
+# llm = ChatVertexAI(
+#     model_name="gemini-1.5-flash",
+# )
+
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0,
