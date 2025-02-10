@@ -59,6 +59,7 @@ const DiscussionContainer: React.FC = () => {
   const [criticPoints, setCriticPoints] = useState<Array<{ title: string; content: string }> | null>(null);
   const [loadingCriticPoints, setLoadingCriticPoints] = useState<Set<string>>(new Set());
   const [extractedPoints, setExtractedPoints] = useState<Set<string>>(new Set());
+  const [investigationReport, setInvestigationReport] = useState<ReportContent | null>(null);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
@@ -382,6 +383,52 @@ const DiscussionContainer: React.FC = () => {
     setCurrentTab(1);
   };
 
+  const handleInvestigateCase = async (point: { title: string; content: string }, isYesCase: boolean) => {
+    try {
+      const requestPayload = {
+        state: {
+          query: state.query,
+          current_role: state.current_role,
+          reporter_content: state.reporter_content,
+          report_id: state.report_id
+        },
+        point_selection_for_critic: {
+          report_id: state.report_id,
+          point_id: state.point_selection_for_critic?.point_id,
+          title: point.title,
+          content: point.content
+        },
+        thread_id: 1,
+        is_yes_case: isYesCase
+      };
+
+      const response = await fetch('http://localhost:8000/investigate_case', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.explored_content) {
+        const investigationData = parseReportContent(
+          data.explored_content,
+          `investigation_${Date.now()}`,
+          `${point.title}の${isYesCase ? 'Yes' : 'No'}事例`
+        );
+        setInvestigationReport(investigationData);
+        setCurrentTab(2); // 調査事例タブに切り替え
+      }
+
+    } catch (error) {
+      console.error('Error:', error);
+      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
+    }
+  };
+
   const parseReportContent = (text: string, reportId: string, topic: string): ReportContent => {
     const lines = text.split('\n');
     const points: Point[] = [];
@@ -475,6 +522,7 @@ const DiscussionContainer: React.FC = () => {
                 <Tabs value={currentTab} onChange={handleTabChange} aria-label="discussion tabs">
                   <Tab label="レポート" />
                   <Tab label="論点" />
+                  <Tab label="調査事例" />
                 </Tabs>
               </Box>
 
@@ -501,7 +549,27 @@ const DiscussionContainer: React.FC = () => {
                 <CriticPoints
                   points={criticPoints}
                   loading={false}
+                  onInvestigateCase={handleInvestigateCase}
                 />
+              </TabPanel>
+
+              <TabPanel value={currentTab} index={2}>
+                {investigationReport && (
+                  <ReportPoints
+                    points={investigationReport.points}
+                    onPointSelect={() => {}}
+                    selectedPointId=""
+                    investigatedPoints={new Set()}
+                    loading={false}
+                    loadingPoints={new Set()}
+                    level={0}
+                    topic={investigationReport.topic}
+                    pointPath={[]}
+                    parentTitle=""
+                    loadingCriticPoints={new Set()}
+                    extractedPoints={new Set()}
+                  />
+                )}
               </TabPanel>
             </>
           )}

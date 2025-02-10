@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Card, CardContent, Typography, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
+import { Box, Card, CardContent, Typography, Grid, CircularProgress, Button } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
 
 interface CriticPointsProps {
   points: Array<{
@@ -7,9 +8,10 @@ interface CriticPointsProps {
     content: string;
   }> | null;
   loading: boolean;
+  onInvestigateCase?: (point: { title: string; content: string }, isYesCase: boolean) => void;
 }
 
-export const CriticPoints: React.FC<CriticPointsProps> = ({ points, loading }) => {
+export const CriticPoints: React.FC<CriticPointsProps> = ({ points, loading, onInvestigateCase }) => {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -31,22 +33,43 @@ export const CriticPoints: React.FC<CriticPointsProps> = ({ points, loading }) =
   }
 
   return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" component="h3" gutterBottom>
-          抽出された論点
-        </Typography>
-        <List>
-          {points.map((point, index) => (
-            <ListItem key={index}>
-              <ListItemText
-                primary={point.title}
-                secondary={point.content}
-              />
-            </ListItem>
-          ))}
-        </List>
-      </CardContent>
-    </Card>
+    <Grid container spacing={2}>
+      {points.map((point, index) => (
+        <Grid item xs={12} key={index}>
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  {point.title}
+                </Typography>
+                <Typography variant="body1" color="text.secondary" paragraph>
+                  {point.content}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    size="small"
+                    startIcon={<SearchIcon />}
+                    onClick={() => onInvestigateCase?.(point, true)}
+                  >
+                    Yesの事例調査
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    size="small"
+                    startIcon={<SearchIcon />}
+                    onClick={() => onInvestigateCase?.(point, false)}
+                  >
+                    Noの事例調査
+                  </Button>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      ))}
+    </Grid>
   );
 };

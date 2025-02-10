@@ -15,10 +15,10 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 from templates import (
-    CHECK_CASES_TEMPLATE,
     CRITIQUE_TEMPLATE,
     GENERATE_REPORT_TEMPLATE,
     GENERATE_DETAILED_REPORT_TEMPLATE,
+    INVESTIGATE_CASES_TEMPLATE,
 )
 from retrievers import create_news_retriever, create_general_retriever
 
@@ -139,20 +139,30 @@ class ReporterAgent:
             }
         )
 
-    def check_cases(self, case: str) -> str:
-        prompt = PromptTemplate(template=CHECK_CASES_TEMPLATE, input_variables=["context", "case"])
+    def check_cases(self, title: str, content: str, yes_or_no: str) -> str:
+        """事例を調査するメソッド"""
+        prompt = PromptTemplate(
+            template=INVESTIGATE_CASES_TEMPLATE,
+            input_variables=["context", "title", "content", "yes_or_no"]
+        )
         try:
-            content = self.general_retriever.invoke(case)
-            if not content:
-                content = [
+            search_query = f"{title} {yes_or_no}の事例"
+            context = self.general_retriever.invoke(search_query)
+            if not context:
+                context = [
                     {"page_content": "No relevant information found for this case.", "metadata": {}}
                 ]
         except Exception as e:
-            content = [{"page_content": f"Error retrieving information: {str(e)}", "metadata": {}}]
+            context = [{"page_content": f"Error retrieving information: {str(e)}", "metadata": {}}]
 
         model = self.llm
-        chain: Runnable = prompt | model | StrOutputParser()
-        return chain.invoke({"context": content, "case": case})
+        chain = prompt | model | StrOutputParser()
+        return chain.invoke({
+            "context": context,
+            "title": title,
+            "content": content,
+            "yes_or_no": yes_or_no
+        })
 
     def parse_report_output(self, text: str, query: str) -> ReportContent:
         """Parse the reporter's markdown output into a structured format."""
